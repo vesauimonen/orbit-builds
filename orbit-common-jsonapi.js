@@ -393,5 +393,5 @@ define("orbit_common/jsonapi_source",
 
     return JSONAPISource;
   });
-global.OC.JSONAPISource = require('orbit_common/jsonapi_source');
+global.OC.JSONAPISource = requireModule('orbit_common/jsonapi_source');
 }(window));

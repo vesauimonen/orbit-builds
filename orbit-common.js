@@ -634,5 +634,5 @@ define("orbit_common/source",
 
     return Source;
   });
-global.OC = require('orbit_common');
+global.OC = requireModule('orbit_common');
 }(window));
