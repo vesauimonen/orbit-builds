@@ -2047,4 +2047,6 @@ define("orbit/transformable",
     return Transformable;
   });
 global.Orbit = requireModule('orbit');
+global.Orbit.__defineModule__ = define;
+global.Orbit.__requireModule__ = requireModule;
 }(window));
