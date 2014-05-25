@@ -157,6 +157,20 @@ define("orbit/action_queue",
 
           settleEach();
         }
+      },
+
+      then: function(success, failure) {
+        var self = this;
+
+        return new Orbit.Promise(function(resolve) {
+          if (self.processing) {
+            self.one('didComplete', function () {
+              resolve();
+            });
+          } else {
+            resolve();
+          }
+        }).then(success, failure);
       }
     };
 
@@ -769,6 +783,22 @@ define("orbit/evented",
               }
             }
           }, this);
+        },
+
+        one: function(eventName, callback, binding) {
+          var callOnce,
+              notifier;
+
+          binding = binding || this;
+
+          notifier = notifierForEvent(this, eventName, true);
+
+          callOnce = function() {
+            callback.apply(binding, arguments);
+            notifier.removeListener(callOnce, binding);
+          };
+
+          notifier.addListener(callOnce, binding);
         },
 
         emit: function(eventNames) {
@@ -1461,15 +1491,10 @@ define("orbit/notifier",
        @param {*} Any number of parameters to be sent to listeners
        */
       emit: function() {
-        var listeners = this.listeners,
-            listener;
-
-        for (var i = 0, len = listeners.length; i < len; i++) {
-          listener = listeners[i];
-          if (listener) {
-            listener[0].apply(listener[1], arguments);
-          }
-        }
+        var args = arguments;
+        this.listeners.slice(0).forEach(function(listener) {
+          listener[0].apply(listener[1], args);
+        });
       },
 
       /**
@@ -1482,18 +1507,14 @@ define("orbit/notifier",
        @returns {Array} Array of responses
        */
       poll: function() {
-        var listeners = this.listeners,
-            listener,
+        var args = arguments,
             allResponses = [],
             response;
 
-        for (var i = 0, len = listeners.length; i < len; i++) {
-          listener = listeners[i];
-          if (listener) {
-            response = listener[0].apply(listener[1], arguments);
-            if (response !== undefined) { allResponses.push(response); }
-          }
-        }
+        this.listeners.slice(0).forEach(function(listener) {
+          response = listener[0].apply(listener[1], args);
+          if (response !== undefined) { allResponses.push(response); }
+        });
 
         return allResponses;
       }
@@ -1641,15 +1662,15 @@ define("orbit/requestable",
                 Action = capitalize(action);
 
             return object.resolve.apply(object, ['assist' + Action].concat(args)).then(
-              null,
+              undefined,
               function() {
                 return object['_' + action].apply(object, args);
               }
             ).then(
-              null,
+              undefined,
               function(error) {
                 return object.resolve.apply(object, ['rescue' + Action].concat(args)).then(
-                  null,
+                  undefined,
                   function() {
                     throw error;
                   }
@@ -1987,6 +2008,10 @@ define("orbit/transformable",
 
           object.didTransform = function(operation, inverse) {
             object._completedTransforms.push([operation, inverse]);
+          };
+
+          object.settleTransforms = function() {
+            return settleTransformEvents.call(object, object._completedTransforms);
           };
 
           object.transform = function(operation) {

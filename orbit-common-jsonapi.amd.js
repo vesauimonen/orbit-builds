@@ -184,7 +184,9 @@ define("orbit_common/jsonapi_source",
           function(raw) {
             var record = _this._deserialize(type, raw);
             _this._addToCache(type, record);
-            return record;
+            return _this.settleTransforms().then(function() {
+              return record;
+            });
           }
         );
       },
@@ -204,7 +206,9 @@ define("orbit_common/jsonapi_source",
               records.push(record);
             });
 
-            return records;
+            return _this.settleTransforms().then(function() {
+              return records;
+            });
           }
         );
       },

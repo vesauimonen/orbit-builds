@@ -353,11 +353,15 @@ define("orbit_common/schema",
         // init default values
         if (attributes) {
           for (var attribute in attributes) {
-            if (data[attribute] === undefined && attributes[attribute].defaultValue) {
-              if (typeof attributes[attribute].defaultValue === 'function') {
-                data[attribute] = attributes[attribute].defaultValue.call(data);
+            if (data[attribute] === undefined) {
+              if (attributes[attribute].defaultValue) {
+                if (typeof attributes[attribute].defaultValue === 'function') {
+                  data[attribute] = attributes[attribute].defaultValue.call(data);
+                } else {
+                  data[attribute] = attributes[attribute].defaultValue;
+                }
               } else {
-                data[attribute] = attributes[attribute].defaultValue;
+                data[attribute] = null;
               }
             }
           }
@@ -367,8 +371,12 @@ define("orbit_common/schema",
         if (links) {
           data.links = {};
           for (var link in links) {
-            if (data.links[link] === undefined && links[link].type === 'hasMany') {
-              data.links[link] = {};
+            if (data.links[link] === undefined) {
+              if (links[link].type === 'hasMany') {
+                data.links[link] = {};
+              } else {
+                data.links[link] = null;
+              }
             }
           }
         }
