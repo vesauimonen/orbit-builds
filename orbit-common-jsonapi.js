@@ -8,6 +8,7 @@ define("orbit_common/jsonapi_source",
     var assert = __dependency1__.assert;
     var clone = __dependency2__.clone;
     var extend = __dependency2__.extend;
+    var isArray = __dependency2__.isArray;
     var RecordNotFoundException = __dependency3__.RecordNotFoundException;
     var RecordAlreadyExistsException = __dependency3__.RecordAlreadyExistsException;
 
@@ -35,29 +36,8 @@ define("orbit_common/jsonapi_source",
         Source.prototype.init.apply(this, arguments);
 
         options = options || {};
-        this.schema = schema;
-        this.remoteIdField = options['remoteIdField'] || 'id';
         this.namespace = options['namespace'];
         this.headers = options['headers'];
-
-        this._remoteToLocalIdMap = {};
-        this._localToRemoteIdMap = {};
-      },
-
-      initRecord: function(type, record) {
-        var id = record[this.schema.idField],
-            remoteId = record[this.remoteIdField];
-
-        if (remoteId && !id) {
-          id = record[this.idField] = this._remoteToLocalId(remoteId);
-        }
-
-        if (!id) {
-          this.schema.initRecord(type, record);
-          id = record[this.schema.idField];
-        }
-
-        this._updateRemoteIdMap(type, id, remoteId);
       },
 
       /////////////////////////////////////////////////////////////////////////////
@@ -66,6 +46,7 @@ define("orbit_common/jsonapi_source",
 
       _transform: function(operation) {
         var _this = this,
+            op    = operation.op,
             path  = operation.path,
             data  = operation.value,
             type  = path[0],
@@ -74,23 +55,24 @@ define("orbit_common/jsonapi_source",
             record;
 
         if (path.length > 2) {
-          remoteId = this._localToRemoteId(type, id);
+          remoteId = this.schema.localToRemoteId(type, id);
           if (!remoteId) throw new RecordNotFoundException(type, id);
 
-          var baseURL = this._buildURL(type, remoteId);
+          var baseURL = this.buildURL(type, remoteId);
 
           path = path.slice(2);
 
-          if (path[0] === 'links') {
+          if (path[0] === '__rel') {
+            path[0] = 'links';
+
             var property = path[1];
             var linkDef = this._cache.schema.models[type].links[property];
-
             var linkedId;
 
-            if (operation.op === 'remove') {
+            if (op === 'remove') {
               if (path.length > 2) {
                 linkedId = path.pop();
-                path.push(this._localToRemoteId(linkDef.model, linkedId));
+                path.push(this.schema.localToRemoteId(linkDef.model, linkedId));
               }
 
             } else {
@@ -100,49 +82,49 @@ define("orbit_common/jsonapi_source",
               } else {
                 linkedId = data;
               }
-              data = this._localToRemoteId(linkDef.model, linkedId);
+              data = this.schema.localToRemoteId(linkDef.model, linkedId);
             }
           }
 
-          var remoteOp = {op: operation.op, path: baseURL + '/' + path.join('/')};
+          var remoteOp = {op: op, path: baseURL + '/' + path.join('/')};
           if (data) remoteOp.value = data;
 
-          return this._ajax(baseURL, 'PATCH', {data: remoteOp}).then(
+          return this.ajax(baseURL, 'PATCH', {data: remoteOp}).then(
             function() {
               _this._transformCache(operation);
             }
           );
 
         } else {
-          if (operation.op === 'add') {
+          if (op === 'add') {
             if (id) {
               var recordInCache = _this.retrieve([type, id]);
               if (recordInCache) throw new RecordAlreadyExistsException(type, id);
             }
 
-            return this._ajax(this._buildURL(type), 'POST', {data: this._serialize(type, data)}).then(
+            return this.ajax(this.buildURL(type), 'POST', {data: this.serialize(type, data)}).then(
               function(raw) {
-                record = _this._deserialize(type, raw);
+                record = _this.deserialize(type, raw);
                 record[_this.schema.idField] = id;
                 _this._addToCache(type, record);
               }
             );
 
           } else {
-            remoteId = this._localToRemoteId(type, id);
+            remoteId = this.schema.localToRemoteId(type, id);
             if (!remoteId) throw new RecordNotFoundException(type, id);
 
-            if (operation.op === 'replace') {
-              return this._ajax(this._buildURL(type, remoteId), 'PUT', {data: this._serialize(type, data)}).then(
+            if (op === 'replace') {
+              return this.ajax(this.buildURL(type, remoteId), 'PUT', {data: this.serialize(type, data)}).then(
                 function(raw) {
-                  record = _this._deserialize(type, raw);
+                  record = _this.deserialize(type, raw);
                   record[_this.schema.idField] = id;
                   _this._addToCache(type, record);
                 }
               );
 
-            } else if (operation.op === 'remove') {
-              return this._ajax(this._buildURL(type, remoteId), 'DELETE').then(function() {
+            } else if (op === 'remove') {
+              return this.ajax(this.buildURL(type, remoteId), 'DELETE').then(function() {
                 _this._transformCache(operation);
               });
             }
@@ -155,13 +137,40 @@ define("orbit_common/jsonapi_source",
       /////////////////////////////////////////////////////////////////////////////
 
       _find: function(type, id) {
+        var remoteId;
+
         if (id && (typeof id === 'number' || typeof id === 'string')) {
-          var remoteId = this._localToRemoteId(type, id);
+          remoteId = this.schema.localToRemoteId(type, id);
           if (!remoteId) throw new RecordNotFoundException(type, id);
           return this._findOne(type, remoteId);
 
-        } else if (id && (typeof id === 'object' && id[this.remoteIdField])) {
-          return this._findOne(type, id[this.remoteIdField]);
+        } else if (id && isArray(id)) {
+          var localId,
+              remoteIds = [],
+              notFound = [];
+
+          for (var i = 0, l = id.length; i < l; i++) {
+            localId =  id[i];
+            if (typeof localId === 'object' && localId[this.schema.remoteIdField]) {
+              remoteId = localId[this.schema.remoteIdField];
+            } else {
+              remoteId = this.schema.localToRemoteId(type, localId);
+            }
+            if (remoteId) {
+              remoteIds.push(remoteId);
+            } else {
+              notFound.push(localId);
+            }
+          }
+
+          if (notFound.length > 0) {
+            throw new RecordNotFoundException(type, notFound);
+          } else {
+            return this._findMany(type, remoteIds);
+          }
+
+        } else if (id && (typeof id === 'object' && id[this.schema.remoteIdField])) {
+          return this._findOne(type, id[this.schema.remoteIdField]);
 
         } else {
           return this._findQuery(type, id);
@@ -173,20 +182,21 @@ define("orbit_common/jsonapi_source",
       /////////////////////////////////////////////////////////////////////////////
 
       _addToCache: function(type, record) {
-        this.initRecord(type, record);
+        record = this.normalize(type, record);
         this._transformCache({
           op: 'add',
-          path: [type, record[this.schema.idField]],
+          path: [type, this.getId(record)],
           value: record
         });
+        return record;
       },
 
       _findOne: function(type, remoteId) {
         var _this = this;
-        return this._ajax(this._buildURL(type, remoteId), 'GET').then(
+        return this.ajax(this.buildURL(type, remoteId), 'GET').then(
           function(raw) {
-            var record = _this._deserialize(type, raw);
-            _this._addToCache(type, record);
+            var deserialized = _this.deserialize(type, raw);
+            var record = _this._addToCache(type, deserialized);
             return _this.settleTransforms().then(function() {
               return record;
             });
@@ -194,18 +204,18 @@ define("orbit_common/jsonapi_source",
         );
       },
 
-      _findQuery: function(type, query) {
+      _findMany: function(type, remoteIds) {
         var _this = this;
-
-        return this._ajax(this._buildURL(type), 'GET', {data: query}).then(
+        return this.ajax(this.buildURL(type, remoteIds), 'GET').then(
           function(raw) {
             var eachRaw,
+                deserialized,
                 record,
                 records = [];
 
             raw.forEach(function(eachRaw) {
-              record = _this._deserialize(type, eachRaw);
-              _this._addToCache(type, record);
+              deserialized = _this.deserialize(type, eachRaw);
+              record = _this._addToCache(type, deserialized);
               records.push(record);
             });
 
@@ -216,14 +226,27 @@ define("orbit_common/jsonapi_source",
         );
       },
 
-      _localToRemoteId: function(type, id) {
-        var dataForType = this._localToRemoteIdMap[type];
-        if (dataForType) return dataForType[id];
-      },
+      _findQuery: function(type, query) {
+        var _this = this;
 
-      _remoteToLocalId: function(type, remoteId) {
-        var dataForType = this._remoteToLocalIdMap[type];
-        if (dataForType) return dataForType[remoteId];
+        return this.ajax(this.buildURL(type), 'GET', {data: query}).then(
+          function(raw) {
+            var eachRaw,
+                deserialized,
+                record,
+                records = [];
+
+            raw.forEach(function(eachRaw) {
+              deserialized = _this.deserialize(type, eachRaw);
+              record = _this._addToCache(type, deserialized);
+              records.push(record);
+            });
+
+            return _this.settleTransforms().then(function() {
+              return records;
+            });
+          }
+        );
       },
 
       _transformCache: function(operation) {
@@ -236,32 +259,25 @@ define("orbit_common/jsonapi_source",
           pathToVerify = operation.path;
         }
 
-        if (!this.retrieve(pathToVerify)) {
-          // TODO console.log('JSONAPISource does not have cached', pathToVerify, 'for operation', operation);
-          inverse = [];
+        if (this.retrieve(pathToVerify)) {
+          // transforming the cache will trigger a call to `_cacheDidTransform`,
+          // which will then trigger `didTransform`
+          this._cache.transform(operation);
 
         } else {
-          inverse = this._cache.transform(operation, true);
-        }
-
-        this.didTransform(operation, inverse);
-      },
-
-      _updateRemoteIdMap: function(type, id, remoteId) {
-        if (id && remoteId) {
-          var mapForType;
-
-          mapForType = this._remoteToLocalIdMap[type];
-          if (!mapForType) mapForType = this._remoteToLocalIdMap[type] = {};
-          mapForType[remoteId] = id;
-
-          mapForType = this._localToRemoteIdMap[type];
-          if (!mapForType) mapForType = this._localToRemoteIdMap[type] = {};
-          mapForType[id] = remoteId;
+          // if the cache can't be transformed because, still trigger `didTransform`
+          //
+          // NOTE: this is not an error condition, since the local cache will often
+          // be sparsely populated compared with the remote store
+          this.didTransform(operation, []);
         }
       },
 
-      _ajax: function(url, method, hash) {
+      /////////////////////////////////////////////////////////////////////////////
+      // Publicly accessible methods particular to JSONAPISource
+      /////////////////////////////////////////////////////////////////////////////
+
+      ajax: function(url, method, hash) {
         var _this = this;
 
         return new Orbit.Promise(function(resolve, reject) {
@@ -307,15 +323,21 @@ define("orbit_common/jsonapi_source",
         });
       },
 
-      _buildURL: function(type, remoteId) {
+      buildURL: function(type, remoteId) {
         var host = this.host,
             namespace = this.namespace,
             url = [];
 
         if (host) { url.push(host); }
         if (namespace) { url.push(namespace); }
-        url.push(this._pathForType(type));
-        if (remoteId) { url.push(remoteId); }
+        url.push(this.pathForType(type));
+        if (remoteId) {
+          if (isArray(remoteId)) {
+            url.push(remoteId.join(','));
+          } else {
+            url.push(remoteId);
+          }
+        }
 
         url = url.join('/');
         if (!host) { url = '/' + url; }
@@ -323,36 +345,45 @@ define("orbit_common/jsonapi_source",
         return url;
       },
 
-      _pathForType: function(type) {
-        return this._pluralize(type);
+      pathForType: function(type) {
+        return this.schema.pluralize(type);
       },
 
-      _pluralize: function(name) {
-        // TODO - allow for pluggable inflector
-        return name + 's';
-      },
-
-      _serialize: function(type, data) {
+      serialize: function(type, data) {
         var serialized = clone(data);
-        delete serialized[this.schema.idField];
 
-        if (serialized.links) {
-          var links = {};
-          for (var i in serialized.links) {
-            var link = serialized.links[i];
-            if (typeof link === 'object') {
-              links[i] = Object.keys(link);
-            } else {
-              links[i] = link;
-            }
+        delete serialized.__normalized;
+        delete serialized.__rev;
+
+        if (this.schema.idField !== this.schema.remoteIdField) {
+          delete serialized[this.schema.idField];
+        }
+
+        if (serialized.__rel) {
+          var relKeys = Object.keys(serialized.__rel);
+
+          if (relKeys.length > 0) {
+            var links = {};
+
+            relKeys.forEach(function(key) {
+              var link = serialized.__rel[key];
+              if (typeof link === 'object') {
+                links[key] = Object.keys(link);
+              } else {
+                links[key] = link;
+              }
+            });
+
+            serialized.links = links;
           }
-          serialized.links = links;
+
+          delete serialized.__rel;
         }
 
         return serialized;
       },
 
-      _deserialize: function(type, data) {
+      deserialize: function(type, data) {
         return data;
       }
     });
