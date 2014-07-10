@@ -1,5 +1,5 @@
 (function(global) {
-var define, requireModule;
+var define, requireModule, require, requirejs;
 
 (function() {
   var registry = {}, seen = {};
@@ -8,17 +8,18 @@ var define, requireModule;
     registry[name] = { deps: deps, callback: callback };
   };
 
-  requireModule = function(name) {
+  requirejs = require = requireModule = function(name) {
+  requirejs._eak_seen = registry;
+
     if (seen[name]) { return seen[name]; }
     seen[name] = {};
 
-    var mod = registry[name];
-
-    if (!mod) {
-      throw new Error("Module: '" + name + "' not found.");
+    if (!registry[name]) {
+      throw new Error("Could not find module " + name);
     }
 
-    var deps = mod.deps,
+    var mod = registry[name],
+        deps = mod.deps,
         callback = mod.callback,
         reified = [],
         exports;
@@ -27,35 +28,60 @@ var define, requireModule;
       if (deps[i] === 'exports') {
         reified.push(exports = {});
       } else {
-        reified.push(requireModule(deps[i]));
+        reified.push(requireModule(resolve(deps[i])));
       }
     }
 
     var value = callback.apply(this, reified);
     return seen[name] = exports || value;
+
+    function resolve(child) {
+      if (child.charAt(0) !== '.') { return child; }
+      var parts = child.split("/");
+      var parentBase = name.split("/").slice(0, -1);
+
+      for (var i=0, l=parts.length; i<l; i++) {
+        var part = parts[i];
+
+        if (part === '..') { parentBase.pop(); }
+        else if (part === '.') { continue; }
+        else { parentBase.push(part); }
+      }
+
+      return parentBase.join("/");
+    }
   };
 
   define.registry = registry;
   define.seen = seen;
 })();
-
-define("orbit",
-  ["orbit/lib/assert","orbit/lib/config","orbit/lib/diffs","orbit/lib/eq","orbit/lib/exceptions","orbit/lib/objects","orbit/lib/strings","orbit/lib/stubs","orbit/main","orbit/action_queue","orbit/document","orbit/evented","orbit/notifier","orbit/requestable","orbit/request_connector","orbit/transaction","orbit/transformable","orbit/transform_connector"],
-  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, Orbit, ActionQueue, Document, Evented, Notifier, Requestable, RequestConnector, Transaction, Transformable, TransformConnector) {
+define("orbit", 
+  ["orbit/main","orbit/action_queue","orbit/document","orbit/evented","orbit/notifier","orbit/requestable","orbit/request_connector","orbit/transaction","orbit/transformable","orbit/transform_connector","orbit/lib/assert","orbit/lib/config","orbit/lib/diffs","orbit/lib/eq","orbit/lib/exceptions","orbit/lib/objects","orbit/lib/strings","orbit/lib/stubs","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __dependency9__, __dependency10__, __dependency11__, __dependency12__, __dependency13__, __dependency14__, __dependency15__, __dependency16__, __dependency17__, __dependency18__, __exports__) {
     "use strict";
-    var assert = __dependency1__.assert;
-    var arrayToOptions = __dependency2__.arrayToOptions;
-    var diffs = __dependency3__.diffs;
-    var eq = __dependency4__.eq;
-    var PathNotFoundException = __dependency5__.PathNotFoundException;
-    var clone = __dependency6__.clone;
-    var expose = __dependency6__.expose;
-    var extend = __dependency6__.extend;
-    var isArray = __dependency6__.isArray;
-    var isNone = __dependency6__.isNone;
-    var capitalize = __dependency7__.capitalize;
-    var noop = __dependency8__.noop;
-    var required = __dependency8__.required;
+    var Orbit = __dependency1__["default"];
+    var ActionQueue = __dependency2__["default"];
+    var Document = __dependency3__["default"];
+    var Evented = __dependency4__["default"];
+    var Notifier = __dependency5__["default"];
+    var Requestable = __dependency6__["default"];
+    var RequestConnector = __dependency7__["default"];
+    var Transaction = __dependency8__["default"];
+    var Transformable = __dependency9__["default"];
+    var TransformConnector = __dependency10__["default"];
+    var assert = __dependency11__.assert;
+    var arrayToOptions = __dependency12__.arrayToOptions;
+    var diffs = __dependency13__.diffs;
+    var eq = __dependency14__.eq;
+    var PathNotFoundException = __dependency15__.PathNotFoundException;
+    var clone = __dependency16__.clone;
+    var expose = __dependency16__.expose;
+    var extend = __dependency16__.extend;
+    var isArray = __dependency16__.isArray;
+    var isNone = __dependency16__.isNone;
+    var capitalize = __dependency17__.capitalize;
+    var noop = __dependency18__.noop;
+    var required = __dependency18__.required;
 
     Orbit.ActionQueue = ActionQueue;
     Orbit.Document = Document;
@@ -81,13 +107,15 @@ define("orbit",
     Orbit.noop = noop;
     Orbit.required = required;
 
-    return Orbit;
+    __exports__["default"] = Orbit;
   });
-define("orbit/action_queue",
-  ["orbit/lib/assert","orbit/main","orbit/evented"],
-  function(__dependency1__, Orbit, Evented) {
+define("orbit/action_queue", 
+  ["./main","./evented","./lib/assert","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
     "use strict";
-    var assert = __dependency1__.assert;
+    var Orbit = __dependency1__["default"];
+    var Evented = __dependency2__["default"];
+    var assert = __dependency3__.assert;
 
     /**
      `ActionQueue` is a FIFO queue of actions that should be performed sequentially.
@@ -219,11 +247,11 @@ define("orbit/action_queue",
       }
     };
 
-    return ActionQueue;
+    __exports__["default"] = ActionQueue;
   });
-define("orbit/document",
-  ["orbit/lib/objects","orbit/lib/diffs","orbit/lib/eq","orbit/lib/exceptions"],
-  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__) {
+define("orbit/document", 
+  ["./lib/objects","./lib/diffs","./lib/eq","./lib/exceptions","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
     var clone = __dependency1__.clone;
     var isArray = __dependency1__.isArray;
@@ -690,14 +718,16 @@ define("orbit/document",
       }
     };
 
-    return Document;
+    __exports__["default"] = Document;
   });
-define("orbit/evented",
-  ["orbit/lib/assert","orbit/lib/objects","orbit/main","orbit/notifier"],
-  function(__dependency1__, __dependency2__, Orbit, Notifier) {
+define("orbit/evented", 
+  ["./main","./notifier","./lib/assert","./lib/objects","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
-    var assert = __dependency1__.assert;
-    var extend = __dependency2__.extend;
+    var Orbit = __dependency1__["default"];
+    var Notifier = __dependency2__["default"];
+    var assert = __dependency3__.assert;
+    var extend = __dependency4__.extend;
 
     var notifierForEvent = function(object, eventName, createIfUndefined) {
       var notifier = object._eventedNotifiers[eventName];
@@ -951,9 +981,9 @@ define("orbit/evented",
       }
     };
 
-    return Evented;
+    __exports__["default"] = Evented;
   });
-define("orbit/lib/assert",
+define("orbit/lib/assert", 
   ["exports"],
   function(__exports__) {
     "use strict";
@@ -969,10 +999,9 @@ define("orbit/lib/assert",
       if (!test) throw new Error("Assertion failed: " + desc);
     };
 
-
     __exports__.assert = assert;
   });
-define("orbit/lib/config",
+define("orbit/lib/config", 
   ["exports"],
   function(__exports__) {
     "use strict";
@@ -1004,11 +1033,10 @@ define("orbit/lib/config",
       return options;
     };
 
-
     __exports__.arrayToOptions = arrayToOptions;
   });
-define("orbit/lib/diffs",
-  ["orbit/lib/eq","orbit/lib/objects","orbit/lib/config","exports"],
+define("orbit/lib/diffs", 
+  ["./eq","./objects","./config","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
     "use strict";
     var eq = __dependency1__.eq;
@@ -1143,7 +1171,7 @@ define("orbit/lib/diffs",
 
     __exports__.diffs = diffs;
   });
-define("orbit/lib/eq",
+define("orbit/lib/eq", 
   ["exports"],
   function(__exports__) {
     "use strict";
@@ -1219,7 +1247,7 @@ define("orbit/lib/eq",
 
     __exports__.eq = eq;
   });
-define("orbit/lib/exceptions",
+define("orbit/lib/exceptions", 
   ["exports"],
   function(__exports__) {
     "use strict";
@@ -1241,8 +1269,8 @@ define("orbit/lib/exceptions",
 
     __exports__.PathNotFoundException = PathNotFoundException;
   });
-define("orbit/lib/objects",
-  ["orbit/lib/eq","exports"],
+define("orbit/lib/objects", 
+  ["./eq","exports"],
   function(__dependency1__, __exports__) {
     "use strict";
     var eq = __dependency1__.eq;
@@ -1373,7 +1401,7 @@ define("orbit/lib/objects",
     __exports__.isArray = isArray;
     __exports__.isNone = isNone;
   });
-define("orbit/lib/strings",
+define("orbit/lib/strings", 
   ["exports"],
   function(__exports__) {
     "use strict";
@@ -1392,7 +1420,7 @@ define("orbit/lib/strings",
 
     __exports__.capitalize = capitalize;
   });
-define("orbit/lib/stubs",
+define("orbit/lib/stubs", 
   ["exports"],
   function(__exports__) {
     "use strict";
@@ -1419,9 +1447,9 @@ define("orbit/lib/stubs",
     __exports__.noop = noop;
     __exports__.required = required;
   });
-define("orbit/main",
-  [],
-  function() {
+define("orbit/main", 
+  ["exports"],
+  function(__exports__) {
     "use strict";
     /**
      Contains core methods and classes for Orbit.js
@@ -1450,12 +1478,11 @@ define("orbit/main",
      */
     var Orbit = {};
 
-
-    return Orbit;
+    __exports__["default"] = Orbit;
   });
-define("orbit/notifier",
-  [],
-  function() {
+define("orbit/notifier", 
+  ["exports"],
+  function(__exports__) {
     "use strict";
     /**
      The `Notifier` class can emit messages to an array of subscribed listeners.
@@ -1578,15 +1605,16 @@ define("orbit/notifier",
       }
     };
 
-    return Notifier;
+    __exports__["default"] = Notifier;
   });
-define("orbit/request_connector",
-  ["orbit/lib/assert","orbit/lib/config","orbit/lib/strings","orbit/requestable"],
-  function(__dependency1__, __dependency2__, __dependency3__, Requestable) {
+define("orbit/request_connector", 
+  ["./requestable","./lib/assert","./lib/config","./lib/strings","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
-    var assert = __dependency1__.assert;
-    var arrayToOptions = __dependency2__.arrayToOptions;
-    var capitalize = __dependency3__.capitalize;
+    var Requestable = __dependency1__["default"];
+    var assert = __dependency2__.assert;
+    var arrayToOptions = __dependency3__.arrayToOptions;
+    var capitalize = __dependency4__.capitalize;
 
     /**
      A `RequestConnector` observes requests made to a primary source and allows a
@@ -1685,15 +1713,16 @@ define("orbit/request_connector",
       }
     };
 
-    return RequestConnector;
+    __exports__["default"] = RequestConnector;
   });
-define("orbit/requestable",
-  ["orbit/lib/assert","orbit/lib/objects","orbit/lib/strings","orbit/evented"],
-  function(__dependency1__, __dependency2__, __dependency3__, Evented) {
+define("orbit/requestable", 
+  ["./evented","./lib/assert","./lib/objects","./lib/strings","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
-    var assert = __dependency1__.assert;
-    var isArray = __dependency2__.isArray;
-    var capitalize = __dependency3__.capitalize;
+    var Evented = __dependency1__["default"];
+    var assert = __dependency2__.assert;
+    var isArray = __dependency3__.isArray;
+    var capitalize = __dependency4__.capitalize;
 
     var Requestable = {
       defaultActions: ['find'],
@@ -1755,11 +1784,11 @@ define("orbit/requestable",
       }
     };
 
-    return Requestable;
+    __exports__["default"] = Requestable;
   });
-define("orbit/transaction",
-  [],
-  function() {
+define("orbit/transaction", 
+  ["exports"],
+  function(__exports__) {
     "use strict";
     var Transaction = function() {
       this.init.apply(this, arguments);
@@ -1811,16 +1840,17 @@ define("orbit/transaction",
       }
     };
 
-    return Transaction;
+    __exports__["default"] = Transaction;
   });
-define("orbit/transform_connector",
-  ["orbit/lib/objects","orbit/lib/diffs","orbit/lib/eq","orbit/lib/config","orbit/action_queue"],
-  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, ActionQueue) {
+define("orbit/transform_connector", 
+  ["./action_queue","./lib/objects","./lib/diffs","./lib/eq","./lib/config","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";
-    var clone = __dependency1__.clone;
-    var diffs = __dependency2__.diffs;
-    var eq = __dependency3__.eq;
-    var arrayToOptions = __dependency4__.arrayToOptions;
+    var ActionQueue = __dependency1__["default"];
+    var clone = __dependency2__.clone;
+    var diffs = __dependency3__.diffs;
+    var eq = __dependency4__.eq;
+    var arrayToOptions = __dependency5__.arrayToOptions;
 
     /**
      A `TransformConnector` observes a source's transforms and applies them to a
@@ -1966,14 +1996,17 @@ define("orbit/transform_connector",
       }
     };
 
-    return TransformConnector;
+    __exports__["default"] = TransformConnector;
   });
-define("orbit/transformable",
-  ["orbit/lib/assert","orbit/lib/objects","orbit/main","orbit/evented","orbit/action_queue"],
-  function(__dependency1__, __dependency2__, Orbit, Evented, ActionQueue) {
+define("orbit/transformable", 
+  ["./main","./evented","./action_queue","./lib/assert","./lib/objects","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";
-    var assert = __dependency1__.assert;
-    var isArray = __dependency2__.isArray;
+    var Orbit = __dependency1__["default"];
+    var Evented = __dependency2__["default"];
+    var ActionQueue = __dependency3__["default"];
+    var assert = __dependency4__.assert;
+    var isArray = __dependency5__.isArray;
 
     var normalizeOperation = function(op) {
       if (typeof op.path === 'string') op.path = op.path.split('/');
@@ -2091,7 +2124,7 @@ define("orbit/transformable",
       }
     };
 
-    return Transformable;
+    __exports__["default"] = Transformable;
   });
 global.Orbit = requireModule('orbit');
 global.Orbit.__defineModule__ = define;

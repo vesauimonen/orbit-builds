@@ -1,12 +1,13 @@
 (function(global) {
 var define = global.Orbit.__defineModule__;
 var requireModule = global.Orbit.__requireModule__;
-define("orbit_common/local_storage_source",
-  ["orbit/lib/assert","orbit/lib/objects","orbit_common/memory_source"],
-  function(__dependency1__, __dependency2__, MemorySource) {
+define("orbit_common/local_storage_source", 
+  ["orbit/lib/assert","orbit/lib/objects","./memory_source","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
     "use strict";
     var assert = __dependency1__.assert;
     var extend = __dependency2__.extend;
+    var MemorySource = __dependency3__["default"];
 
     var supportsLocalStorage = function() {
       try {
@@ -86,7 +87,7 @@ define("orbit_common/local_storage_source",
       }
     });
 
-    return LocalStorageSource;
+    __exports__["default"] = LocalStorageSource;
   });
 global.OC.LocalStorageSource = requireModule('orbit_common/local_storage_source');
 }(window));

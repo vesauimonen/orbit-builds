@@ -1,13 +1,15 @@
-define("orbit_common/jsonapi_source",
-  ["orbit/lib/assert","orbit/lib/objects","orbit_common/lib/exceptions","orbit/main","orbit_common/source"],
-  function(__dependency1__, __dependency2__, __dependency3__, Orbit, Source) {
+define("orbit_common/jsonapi_source", 
+  ["orbit/main","orbit/lib/assert","orbit/lib/objects","./source","./lib/exceptions","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";
-    var assert = __dependency1__.assert;
-    var clone = __dependency2__.clone;
-    var extend = __dependency2__.extend;
-    var isArray = __dependency2__.isArray;
-    var RecordNotFoundException = __dependency3__.RecordNotFoundException;
-    var RecordAlreadyExistsException = __dependency3__.RecordAlreadyExistsException;
+    var Orbit = __dependency1__["default"];
+    var assert = __dependency2__.assert;
+    var clone = __dependency3__.clone;
+    var extend = __dependency3__.extend;
+    var isArray = __dependency3__.isArray;
+    var Source = __dependency4__["default"];
+    var RecordNotFoundException = __dependency5__.RecordNotFoundException;
+    var RecordAlreadyExistsException = __dependency5__.RecordAlreadyExistsException;
 
     /**
      Source for accessing a JSON API compliant RESTful API with AJAX
@@ -35,6 +37,7 @@ define("orbit_common/jsonapi_source",
         options = options || {};
         this.namespace = options['namespace'];
         this.headers = options['headers'];
+        this.host = options['host'];
       },
 
       /////////////////////////////////////////////////////////////////////////////
@@ -385,5 +388,5 @@ define("orbit_common/jsonapi_source",
       }
     });
 
-    return JSONAPISource;
+    __exports__["default"] = JSONAPISource;
   });

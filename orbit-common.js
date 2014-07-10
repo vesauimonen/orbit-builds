@@ -1,14 +1,20 @@
 (function(global) {
 var define = global.Orbit.__defineModule__;
 var requireModule = global.Orbit.__requireModule__;
-define("orbit_common",
-  ["orbit_common/lib/exceptions","orbit_common/main","orbit_common/cache","orbit_common/id_map","orbit_common/schema","orbit_common/source","orbit_common/memory_source"],
-  function(__dependency1__, OC, Cache, IdMap, Schema, Source, MemorySource) {
+define("orbit_common", 
+  ["orbit_common/main","orbit_common/cache","orbit_common/id_map","orbit_common/schema","orbit_common/source","orbit_common/memory_source","orbit_common/lib/exceptions","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __exports__) {
     "use strict";
-    var OperationNotAllowed = __dependency1__.OperationNotAllowed;
-    var RecordNotFoundException = __dependency1__.RecordNotFoundException;
-    var LinkNotFoundException = __dependency1__.LinkNotFoundException;
-    var RecordAlreadyExistsException = __dependency1__.RecordAlreadyExistsException;
+    var OC = __dependency1__["default"];
+    var Cache = __dependency2__["default"];
+    var IdMap = __dependency3__["default"];
+    var Schema = __dependency4__["default"];
+    var Source = __dependency5__["default"];
+    var MemorySource = __dependency6__["default"];
+    var OperationNotAllowed = __dependency7__.OperationNotAllowed;
+    var RecordNotFoundException = __dependency7__.RecordNotFoundException;
+    var LinkNotFoundException = __dependency7__.LinkNotFoundException;
+    var RecordAlreadyExistsException = __dependency7__.RecordAlreadyExistsException;
 
     OC.Cache = Cache;
     OC.Schema = Schema;
@@ -20,16 +26,17 @@ define("orbit_common",
     OC.LinkNotFoundException = LinkNotFoundException;
     OC.RecordAlreadyExistsException = RecordAlreadyExistsException;
 
-
-    return OC;
+    __exports__["default"] = OC;
   });
-define("orbit_common/cache",
-  ["orbit/lib/objects","orbit_common/lib/exceptions","orbit/document","orbit/evented"],
-  function(__dependency1__, __dependency2__, Document, Evented) {
+define("orbit_common/cache", 
+  ["orbit/document","orbit/evented","orbit/lib/objects","./lib/exceptions","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
-    var expose = __dependency1__.expose;
-    var isArray = __dependency1__.isArray;
-    var OperationNotAllowed = __dependency2__.OperationNotAllowed;
+    var Document = __dependency1__["default"];
+    var Evented = __dependency2__["default"];
+    var expose = __dependency3__.expose;
+    var isArray = __dependency3__.isArray;
+    var OperationNotAllowed = __dependency4__.OperationNotAllowed;
 
     /**
      `Cache` provides a thin wrapper over an internally maintained instance of a
@@ -349,11 +356,11 @@ define("orbit_common/cache",
       }
     };
 
-    return Cache;
+    __exports__["default"] = Cache;
   });
-define("orbit_common/id_map",
-  ["orbit/lib/assert"],
-  function(__dependency1__) {
+define("orbit_common/id_map", 
+  ["orbit/lib/assert","exports"],
+  function(__dependency1__, __exports__) {
     "use strict";
     var assert = __dependency1__.assert;
 
@@ -432,9 +439,9 @@ define("orbit_common/id_map",
       }
     };
 
-    return IdMap;
+    __exports__["default"] = IdMap;
   });
-define("orbit_common/lib/exceptions",
+define("orbit_common/lib/exceptions", 
   ["exports"],
   function(__exports__) {
     "use strict";
@@ -513,15 +520,14 @@ define("orbit_common/lib/exceptions",
       constructor: RecordAlreadyExistsException
     };
 
-
     __exports__.OperationNotAllowed = OperationNotAllowed;
     __exports__.RecordNotFoundException = RecordNotFoundException;
     __exports__.LinkNotFoundException = LinkNotFoundException;
     __exports__.RecordAlreadyExistsException = RecordAlreadyExistsException;
   });
-define("orbit_common/main",
-  [],
-  function() {
+define("orbit_common/main", 
+  ["exports"],
+  function(__exports__) {
     "use strict";
     /**
      The Orbit Common library (namespaced `OC` by default) defines a common set of
@@ -544,18 +550,20 @@ define("orbit_common/main",
      */
     var OC = {};
 
-    return OC;
+    __exports__["default"] = OC;
   });
-define("orbit_common/memory_source",
-  ["orbit/lib/assert","orbit/lib/objects","orbit_common/lib/exceptions","orbit/main","orbit_common/source"],
-  function(__dependency1__, __dependency2__, __dependency3__, Orbit, Source) {
+define("orbit_common/memory_source", 
+  ["orbit/main","orbit/lib/assert","orbit/lib/objects","./source","./lib/exceptions","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";
-    var assert = __dependency1__.assert;
-    var extend = __dependency2__.extend;
-    var isArray = __dependency2__.isArray;
-    var isNone = __dependency2__.isNone;
-    var RecordNotFoundException = __dependency3__.RecordNotFoundException;
-    var LinkNotFoundException = __dependency3__.LinkNotFoundException;
+    var Orbit = __dependency1__["default"];
+    var assert = __dependency2__.assert;
+    var extend = __dependency3__.extend;
+    var isArray = __dependency3__.isArray;
+    var isNone = __dependency3__.isNone;
+    var Source = __dependency4__["default"];
+    var RecordNotFoundException = __dependency5__.RecordNotFoundException;
+    var LinkNotFoundException = __dependency5__.LinkNotFoundException;
 
     /**
      Source for storing in-memory data
@@ -771,14 +779,16 @@ define("orbit_common/memory_source",
       }
     });
 
-    return MemorySource;
+    __exports__["default"] = MemorySource;
   });
-define("orbit_common/schema",
-  ["orbit/lib/objects","orbit_common/lib/exceptions","orbit/evented","orbit_common/id_map"],
-  function(__dependency1__, __dependency2__, Evented, IdMap) {
+define("orbit_common/schema", 
+  ["orbit/lib/objects","./lib/exceptions","orbit/evented","./id_map","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
     var clone = __dependency1__.clone;
     var OperationNotAllowed = __dependency2__.OperationNotAllowed;
+    var Evented = __dependency3__["default"];
+    var IdMap = __dependency4__["default"];
 
     /**
      `Schema`
@@ -910,7 +920,7 @@ define("orbit_common/schema",
         if (attributes) {
           for (var attribute in attributes) {
             if (record[attribute] === undefined) {
-              if (attributes[attribute].defaultValue) {
+              if (attributes[attribute].defaultValue !== undefined) {
                 if (typeof attributes[attribute].defaultValue === 'function') {
                   record[attribute] = attributes[attribute].defaultValue.call(record);
                 } else {
@@ -976,15 +986,19 @@ define("orbit_common/schema",
       }
     };
 
-    return Schema;
+    __exports__["default"] = Schema;
   });
-define("orbit_common/source",
-  ["orbit/lib/assert","orbit/lib/stubs","orbit/lib/objects","orbit/document","orbit/transformable","orbit/requestable","orbit_common/cache"],
-  function(__dependency1__, __dependency2__, __dependency3__, Document, Transformable, Requestable, Cache) {
+define("orbit_common/source", 
+  ["orbit/document","orbit/transformable","orbit/requestable","orbit/lib/assert","orbit/lib/stubs","orbit/lib/objects","./cache","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __exports__) {
     "use strict";
-    var assert = __dependency1__.assert;
-    var required = __dependency2__.required;
-    var expose = __dependency3__.expose;
+    var Document = __dependency1__["default"];
+    var Transformable = __dependency2__["default"];
+    var Requestable = __dependency3__["default"];
+    var assert = __dependency4__.assert;
+    var required = __dependency5__.required;
+    var expose = __dependency6__.expose;
+    var Cache = __dependency7__["default"];
 
     /**
      `Source` is an abstract base class to be extended by other sources.
@@ -1206,7 +1220,7 @@ define("orbit_common/source",
       }
     };
 
-    return Source;
+    __exports__["default"] = Source;
   });
 global.OC = requireModule('orbit_common');
 }(window));
