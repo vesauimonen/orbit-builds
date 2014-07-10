@@ -1,4 +1,4 @@
-define("orbit_common/jsonapi_source", 
+define("orbit-common/jsonapi-source", 
   ["orbit/main","orbit/lib/assert","orbit/lib/objects","./source","./lib/exceptions","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";

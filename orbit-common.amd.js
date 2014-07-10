@@ -1,5 +1,5 @@
-define("orbit_common", 
-  ["orbit_common/main","orbit_common/cache","orbit_common/id_map","orbit_common/schema","orbit_common/source","orbit_common/memory_source","orbit_common/lib/exceptions","exports"],
+define("orbit-common", 
+  ["orbit-common/main","orbit-common/cache","orbit-common/id-map","orbit-common/schema","orbit-common/source","orbit-common/memory-source","orbit-common/lib/exceptions","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __exports__) {
     "use strict";
     var OC = __dependency1__["default"];
@@ -25,7 +25,7 @@ define("orbit_common",
 
     __exports__["default"] = OC;
   });
-define("orbit_common/cache", 
+define("orbit-common/cache", 
   ["orbit/document","orbit/evented","orbit/lib/objects","./lib/exceptions","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
@@ -355,7 +355,7 @@ define("orbit_common/cache",
 
     __exports__["default"] = Cache;
   });
-define("orbit_common/id_map", 
+define("orbit-common/id-map", 
   ["orbit/lib/assert","exports"],
   function(__dependency1__, __exports__) {
     "use strict";
@@ -438,7 +438,7 @@ define("orbit_common/id_map",
 
     __exports__["default"] = IdMap;
   });
-define("orbit_common/lib/exceptions", 
+define("orbit-common/lib/exceptions", 
   ["exports"],
   function(__exports__) {
     "use strict";
@@ -522,7 +522,7 @@ define("orbit_common/lib/exceptions",
     __exports__.LinkNotFoundException = LinkNotFoundException;
     __exports__.RecordAlreadyExistsException = RecordAlreadyExistsException;
   });
-define("orbit_common/main", 
+define("orbit-common/main", 
   ["exports"],
   function(__exports__) {
     "use strict";
@@ -549,7 +549,7 @@ define("orbit_common/main",
 
     __exports__["default"] = OC;
   });
-define("orbit_common/memory_source", 
+define("orbit-common/memory-source", 
   ["orbit/main","orbit/lib/assert","orbit/lib/objects","./source","./lib/exceptions","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";
@@ -778,8 +778,8 @@ define("orbit_common/memory_source",
 
     __exports__["default"] = MemorySource;
   });
-define("orbit_common/schema", 
-  ["orbit/lib/objects","./lib/exceptions","orbit/evented","./id_map","exports"],
+define("orbit-common/schema", 
+  ["orbit/lib/objects","./lib/exceptions","orbit/evented","./id-map","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
     var clone = __dependency1__.clone;
@@ -985,7 +985,7 @@ define("orbit_common/schema",
 
     __exports__["default"] = Schema;
   });
-define("orbit_common/source", 
+define("orbit-common/source", 
   ["orbit/document","orbit/transformable","orbit/requestable","orbit/lib/assert","orbit/lib/stubs","orbit/lib/objects","./cache","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __exports__) {
     "use strict";

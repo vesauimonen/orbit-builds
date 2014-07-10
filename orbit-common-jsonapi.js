@@ -1,7 +1,7 @@
 (function(global) {
 var define = global.Orbit.__defineModule__;
 var requireModule = global.Orbit.__requireModule__;
-define("orbit_common/jsonapi_source", 
+define("orbit-common/jsonapi-source", 
   ["orbit/main","orbit/lib/assert","orbit/lib/objects","./source","./lib/exceptions","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";
@@ -393,5 +393,5 @@ define("orbit_common/jsonapi_source",
 
     __exports__["default"] = JSONAPISource;
   });
-global.OC.JSONAPISource = requireModule('orbit_common/jsonapi_source');
+global.OC.JSONAPISource = requireModule('orbit-common/jsonapi-source');
 }(window));

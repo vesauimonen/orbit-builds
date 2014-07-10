@@ -56,7 +56,7 @@ var define, requireModule, require, requirejs;
   define.seen = seen;
 })();
 define("orbit", 
-  ["orbit/main","orbit/action_queue","orbit/document","orbit/evented","orbit/notifier","orbit/requestable","orbit/request_connector","orbit/transaction","orbit/transformable","orbit/transform_connector","orbit/lib/assert","orbit/lib/config","orbit/lib/diffs","orbit/lib/eq","orbit/lib/exceptions","orbit/lib/objects","orbit/lib/strings","orbit/lib/stubs","exports"],
+  ["orbit/main","orbit/action-queue","orbit/document","orbit/evented","orbit/notifier","orbit/requestable","orbit/request-connector","orbit/transaction","orbit/transformable","orbit/transform-connector","orbit/lib/assert","orbit/lib/config","orbit/lib/diffs","orbit/lib/eq","orbit/lib/exceptions","orbit/lib/objects","orbit/lib/strings","orbit/lib/stubs","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __dependency9__, __dependency10__, __dependency11__, __dependency12__, __dependency13__, __dependency14__, __dependency15__, __dependency16__, __dependency17__, __dependency18__, __exports__) {
     "use strict";
     var Orbit = __dependency1__["default"];
@@ -109,7 +109,7 @@ define("orbit",
 
     __exports__["default"] = Orbit;
   });
-define("orbit/action_queue", 
+define("orbit/action-queue", 
   ["./main","./evented","./lib/assert","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
     "use strict";
@@ -1607,7 +1607,7 @@ define("orbit/notifier",
 
     __exports__["default"] = Notifier;
   });
-define("orbit/request_connector", 
+define("orbit/request-connector", 
   ["./requestable","./lib/assert","./lib/config","./lib/strings","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
@@ -1842,8 +1842,8 @@ define("orbit/transaction",
 
     __exports__["default"] = Transaction;
   });
-define("orbit/transform_connector", 
-  ["./action_queue","./lib/objects","./lib/diffs","./lib/eq","./lib/config","exports"],
+define("orbit/transform-connector", 
+  ["./action-queue","./lib/objects","./lib/diffs","./lib/eq","./lib/config","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";
     var ActionQueue = __dependency1__["default"];
@@ -1999,7 +1999,7 @@ define("orbit/transform_connector",
     __exports__["default"] = TransformConnector;
   });
 define("orbit/transformable", 
-  ["./main","./evented","./action_queue","./lib/assert","./lib/objects","exports"],
+  ["./main","./evented","./action-queue","./lib/assert","./lib/objects","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";
     var Orbit = __dependency1__["default"];
