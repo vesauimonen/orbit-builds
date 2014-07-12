@@ -8,7 +8,6 @@ define("orbit-common/jsonapi-source",
     var Orbit = __dependency1__["default"];
     var assert = __dependency2__.assert;
     var clone = __dependency3__.clone;
-    var extend = __dependency3__.extend;
     var isArray = __dependency3__.isArray;
     var Source = __dependency4__["default"];
     var RecordNotFoundException = __dependency5__.RecordNotFoundException;
@@ -24,18 +23,13 @@ define("orbit-common/jsonapi-source",
      @param options
      @constructor
      */
-    var JSONAPISource = function() {
-      this.init.apply(this, arguments);
-    };
-
-    extend(JSONAPISource.prototype, Source.prototype, {
-      constructor: JSONAPISource,
+    var JSONAPISource = Source.extend({
 
       init: function(schema, options) {
         assert('JSONAPISource requires Orbit.Promise be defined', Orbit.Promise);
         assert('JSONAPISource requires Orbit.ajax be defined', Orbit.ajax);
 
-        Source.prototype.init.apply(this, arguments);
+        this._super.apply(this, arguments);
 
         options = options || {};
         this.namespace = options['namespace'];

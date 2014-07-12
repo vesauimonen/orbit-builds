@@ -555,7 +555,6 @@ define("orbit-common/memory-source",
     "use strict";
     var Orbit = __dependency1__["default"];
     var assert = __dependency2__.assert;
-    var extend = __dependency3__.extend;
     var isArray = __dependency3__.isArray;
     var isNone = __dependency3__.isNone;
     var Source = __dependency4__["default"];
@@ -572,17 +571,10 @@ define("orbit-common/memory-source",
      @param options
      @constructor
      */
-    var MemorySource = function() {
-      this.init.apply(this, arguments);
-    };
-
-    extend(MemorySource.prototype, Source.prototype, {
-      constructor: MemorySource,
-
+    var MemorySource = Source.extend({
       init: function(schema, options) {
         assert('MemorySource requires Orbit.Promise to be defined', Orbit.Promise);
-
-        Source.prototype.init.apply(this, arguments);
+        this._super.apply(this, arguments);
       },
 
       /////////////////////////////////////////////////////////////////////////////
@@ -994,6 +986,7 @@ define("orbit-common/source",
     var Requestable = __dependency3__["default"];
     var assert = __dependency4__.assert;
     var required = __dependency5__.required;
+    var Class = __dependency6__.Class;
     var expose = __dependency6__.expose;
     var Cache = __dependency7__["default"];
 
@@ -1006,13 +999,7 @@ define("orbit-common/source",
      @param options
      @constructor
     */
-    var Source = function() {
-      this.init.apply(this, arguments);
-    };
-
-    Source.prototype = {
-      constructor: Source,
-
+    var Source = Class.extend({
       init: function(schema, options) {
         assert("Source's `schema` must be specified", schema);
         assert("Source's `schema.idField` must be specified", schema.idField);
@@ -1215,7 +1202,7 @@ define("orbit-common/source",
       getId: function(data) {
         return data[this.schema.idField];
       }
-    };
+    });
 
     __exports__["default"] = Source;
   });

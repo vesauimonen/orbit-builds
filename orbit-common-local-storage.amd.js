@@ -1,10 +1,9 @@
 define("orbit-common/local-storage-source", 
-  ["orbit/lib/assert","orbit/lib/objects","./memory-source","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
+  ["orbit/lib/assert","./memory-source","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
     "use strict";
     var assert = __dependency1__.assert;
-    var extend = __dependency2__.extend;
-    var MemorySource = __dependency3__["default"];
+    var MemorySource = __dependency2__["default"];
 
     var supportsLocalStorage = function() {
       try {
@@ -24,17 +23,11 @@ define("orbit-common/local-storage-source",
      @param {Object}    [options]
      @constructor
      */
-    var LocalStorageSource = function() {
-      this.init.apply(this, arguments);
-    };
-
-    extend(LocalStorageSource.prototype, MemorySource.prototype, {
-      constructor: LocalStorageSource,
-
+    var LocalStorageSource = MemorySource.extend({
       init: function(schema, options) {
         assert('Your browser does not support local storage!', supportsLocalStorage());
 
-        MemorySource.prototype.init.apply(this, arguments);
+        this._super.apply(this, arguments);
 
         options = options || {};
         this.namespace = options['namespace'] || 'orbit'; // local storage key

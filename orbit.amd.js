@@ -16,10 +16,14 @@ define("orbit",
     var arrayToOptions = __dependency12__.arrayToOptions;
     var diffs = __dependency13__.diffs;
     var eq = __dependency14__.eq;
+    var Exception = __dependency15__.Exception;
     var PathNotFoundException = __dependency15__.PathNotFoundException;
+    var Class = __dependency16__.Class;
     var clone = __dependency16__.clone;
+    var defineClass = __dependency16__.defineClass;
     var expose = __dependency16__.expose;
     var extend = __dependency16__.extend;
+    var extendClass = __dependency16__.extendClass;
     var isArray = __dependency16__.isArray;
     var isNone = __dependency16__.isNone;
     var capitalize = __dependency17__.capitalize;
@@ -40,10 +44,14 @@ define("orbit",
     Orbit.arrayToOptions = arrayToOptions;
     Orbit.diffs = diffs;
     Orbit.eq = eq;
+    Orbit.Exception = Exception;
     Orbit.PathNotFoundException = PathNotFoundException;
+    Orbit.Class = Class;
     Orbit.clone = clone;
+    Orbit.defineClass = defineClass;
     Orbit.expose = expose;
     Orbit.extend = extend;
+    Orbit.extendClass = extendClass;
     Orbit.isArray = isArray;
     Orbit.isNone = isNone;
     Orbit.capitalize = capitalize;
@@ -53,12 +61,13 @@ define("orbit",
     __exports__["default"] = Orbit;
   });
 define("orbit/action-queue", 
-  ["./main","./evented","./lib/assert","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
+  ["./main","./evented","./lib/assert","./lib/objects","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
     var Orbit = __dependency1__["default"];
     var Evented = __dependency2__["default"];
     var assert = __dependency3__.assert;
+    var Class = __dependency4__.Class;
 
     /**
      `ActionQueue` is a FIFO queue of actions that should be performed sequentially.
@@ -93,13 +102,7 @@ define("orbit/action-queue",
      @param {Boolean}  [options.autoProcess=true] Are actions automatically processed as soon as they are pushed?
      @constructor
      */
-    var ActionQueue = function() {
-      this.init.apply(this, arguments);
-    };
-
-    ActionQueue.prototype = {
-      constructor: ActionQueue,
-
+    var ActionQueue = Class.extend({
       init: function(fn, context, options) {
         assert('ActionQueue requires Orbit.Promise to be defined', Orbit.Promise);
 
@@ -188,7 +191,7 @@ define("orbit/action-queue",
           }
         }).then(success, failure);
       }
-    };
+    });
 
     __exports__["default"] = ActionQueue;
   });
@@ -196,6 +199,7 @@ define("orbit/document",
   ["./lib/objects","./lib/diffs","./lib/eq","./lib/exceptions","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
+    var Class = __dependency1__.Class;
     var clone = __dependency1__.clone;
     var isArray = __dependency1__.isArray;
     var diffs = __dependency2__.diffs;
@@ -219,13 +223,7 @@ define("orbit/document",
      @param {Boolean} [options.arrayBasedPaths=false] Should paths be array based, or `'/'` delimited (the default)?
      @constructor
      */
-    var Document = function() {
-      this.init.apply(this, arguments);
-    };
-
-    Document.prototype = {
-      constructor: Document,
-
+    var Document = Class.extend({
       init: function(data, options) {
         options = options || {};
         this.arrayBasedPaths = options.arrayBasedPaths !== undefined ? options.arrayBasedPaths : false;
@@ -659,7 +657,7 @@ define("orbit/document",
           return this._add(toPath, this._retrieve(fromPath), invert);
         }
       }
-    };
+    });
 
     __exports__["default"] = Document;
   });
@@ -1191,9 +1189,20 @@ define("orbit/lib/eq",
     __exports__.eq = eq;
   });
 define("orbit/lib/exceptions", 
-  ["exports"],
-  function(__exports__) {
+  ["./objects","exports"],
+  function(__dependency1__, __exports__) {
     "use strict";
+    var Class = __dependency1__.Class;
+
+    /**
+     Base Exception
+
+     @class Exception
+     @namespace Orbit
+     @constructor
+     */
+    var Exception = Class.extend();
+
     /**
      Exception thrown when a path in a document can not be found.
 
@@ -1202,14 +1211,13 @@ define("orbit/lib/exceptions",
      @param {String} path
      @constructor
      */
-    var PathNotFoundException = function(path) {
-      this.path = path;
-    };
+    var PathNotFoundException = Exception.extend({
+      init: function(path) {
+        this.path = path;
+      }
+    });
 
-    PathNotFoundException.prototype = {
-      constructor: PathNotFoundException
-    };
-
+    __exports__.Exception = Exception;
     __exports__.PathNotFoundException = PathNotFoundException;
   });
 define("orbit/lib/objects", 
@@ -1280,7 +1288,7 @@ define("orbit/lib/objects",
       if (arguments.length > 2) {
         properties = Array.prototype.slice.call(arguments, 2);
       } else {
-        properties = source;
+        properties = Object.keys(source);
       }
 
       properties.forEach(function(p) {
@@ -1295,7 +1303,7 @@ define("orbit/lib/objects",
     };
 
     /**
-     Extend an object with the properties of one or more other objects
+     Extend an object with the properties of one or more other objects.
 
      @method extend
      @for Orbit
@@ -1312,6 +1320,145 @@ define("orbit/lib/objects",
         }
       });
     };
+
+    /**
+     Extend a class with the properties and methods of one or more other classes.
+
+     When a method is replaced with another method, it will be wrapped in a
+     function that makes the replaced method accessible via `this._super`.
+
+     @method extendClass
+     @for Orbit
+     @param {Object} destination The class to merge into
+     @param {Object} source One or more source classes
+     */
+    var extendClass = function(destination) {
+      var sources = Array.prototype.slice.call(arguments, 1);
+      sources.forEach(function(source) {
+        for (var p in source) {
+          if (destination[p] &&
+              typeof destination[p] === 'function' &&
+              typeof source[p] === 'function') {
+
+            destination[p] =
+              (function(destinationFn, sourceFn) {
+                return function() {
+                  var prevSuper = this._super;
+                  this._super = destinationFn;
+
+                  var ret = sourceFn.apply(this, arguments);
+
+                  this._super = prevSuper;
+
+                  return ret;
+                };
+              })(destination[p], source[p]);
+
+          } else {
+            destination[p] = source[p];
+          }
+        }
+      });
+    };
+
+    // `subclassing` is a state flag used by `defineClass` to track when a class is
+    // being subclassed. It allows constructors to avoid calling `init`, which can
+    // be expensive and cause undesireable side effects.
+    var subclassing = false;
+
+    /**
+     Define a new class with the properties and methods of one or more other classes.
+
+     The new class can be based on a `SuperClass`, which will be inserted into its
+     prototype chain.
+
+     Furthermore, one or more mixins (object that contain properties and/or methods)
+     may be specified, which will be applied in order. When a method is replaced
+     with another method, it will be wrapped in a function that makes the previous
+     method accessible via `this._super`.
+
+     @method defineClass
+     @for Orbit
+     @param {Object} SuperClass A base class to extend. If `mixins` are to be included
+                                without a `SuperClass`, pass `null` for SuperClass.
+     @param {Object} mixins One or more objects that contain properties and methods
+                            to apply to the new class.
+     */
+    var defineClass = function(SuperClass) {
+      var Class = function() {
+        if (!subclassing && this.init) {
+          this.init.apply(this, arguments);
+        }
+      };
+
+      if (SuperClass) {
+        subclassing = true;
+        Class.prototype = new SuperClass();
+        subclassing = false;
+      }
+
+      if (arguments.length > 1) {
+        var extendArgs = Array.prototype.slice.call(arguments, 1);
+        extendArgs.unshift(Class.prototype);
+        extendClass.apply(Class.prototype, extendArgs);
+      }
+
+      Class.constructor = Class;
+
+      Class.extend = function() {
+        var args = Array.prototype.slice.call(arguments, 0);
+        args.unshift(Class);
+        return defineClass.apply(Class, args);
+      };
+
+      return Class;
+    };
+
+    /**
+     A base class that can be extended.
+
+     @example
+
+     ```javascript
+     var CelestialObject = Class.extend({
+       init: function() {
+         this._super();
+         this.isCelestialObject = true;
+       },
+       greeting: function() {
+         return 'Hello from ' + this.name;
+       }
+     });
+
+     var Planet = CelestialObject.extend({
+       init: function() {
+         this._super();
+         this.isPlanet = true;
+       },
+       greeting: function() {
+         return this._super() + '!';
+       },
+     });
+
+     var earth = new Planet();
+     earth.name = 'Earth';
+
+     console.log(earth instanceof Class);           // true
+     console.log(earth instanceof CelestialObject); // true
+     console.log(earth instanceof Planet);          // true
+
+     console.log(earth.isCelestialObject);          // true
+     console.log(earth.isPlanet);                   // true
+
+     console.log(earth.greeting());                 // 'Hello from Earth!'
+     ```
+
+     @class Class
+     @for Orbit
+     */
+    var Class = defineClass(null, {
+      init: function() {}
+    });
 
     /**
      Checks whether an object is an instance of an `Array`
@@ -1337,10 +1484,12 @@ define("orbit/lib/objects",
       return obj === undefined || obj === null;
     };
 
+    __exports__.Class = Class;
     __exports__.clone = clone;
-    __exports__.eq = eq;
+    __exports__.defineClass = defineClass;
     __exports__.expose = expose;
     __exports__.extend = extend;
+    __exports__.extendClass = extendClass;
     __exports__.isArray = isArray;
     __exports__.isNone = isNone;
   });
@@ -1424,9 +1573,11 @@ define("orbit/main",
     __exports__["default"] = Orbit;
   });
 define("orbit/notifier", 
-  ["exports"],
-  function(__exports__) {
+  ["./lib/objects","exports"],
+  function(__dependency1__, __exports__) {
     "use strict";
+    var Class = __dependency1__.Class;
+
     /**
      The `Notifier` class can emit messages to an array of subscribed listeners.
      Here's a simple example:
@@ -1467,11 +1618,7 @@ define("orbit/notifier",
      @namespace Orbit
      @constructor
      */
-    var Notifier = function() {
-      this.init.apply(this, arguments);
-    };
-
-    Notifier.prototype = {
+    var Notifier = Class.extend({
       init: function() {
         this.listeners = [];
       },
@@ -1546,18 +1693,19 @@ define("orbit/notifier",
 
         return allResponses;
       }
-    };
+    });
 
     __exports__["default"] = Notifier;
   });
 define("orbit/request-connector", 
-  ["./requestable","./lib/assert","./lib/config","./lib/strings","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
+  ["./requestable","./lib/assert","./lib/config","./lib/objects","./lib/strings","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";
     var Requestable = __dependency1__["default"];
     var assert = __dependency2__.assert;
     var arrayToOptions = __dependency3__.arrayToOptions;
-    var capitalize = __dependency4__.capitalize;
+    var Class = __dependency4__.Class;
+    var capitalize = __dependency5__.capitalize;
 
     /**
      A `RequestConnector` observes requests made to a primary source and allows a
@@ -1586,27 +1734,23 @@ define("orbit/request-connector",
      @param {Boolean} [options.active=true] Is the connector is actively observing the `primarySource`?
      @constructor
      */
-    var RequestConnector = function(primarySource, secondarySource, options) {
-      var _this = this;
+    var RequestConnector = Class.extend({
+      init: function(primarySource, secondarySource, options) {
+        this.primarySource = primarySource;
+        this.secondarySource = secondarySource;
 
-      this.primarySource = primarySource;
-      this.secondarySource = secondarySource;
+        options = options || {};
 
-      options = options || {};
+        this.actions = options.actions || Requestable.defaultActions;
+        if (options.types) this.types = arrayToOptions(options.types);
 
-      this.actions = options.actions || Requestable.defaultActions;
-      if (options.types) this.types = arrayToOptions(options.types);
+        this.mode = options.mode !== undefined ? options.mode : 'rescue';
+        assert("`mode` must be 'assist' or 'rescue'", this.mode === 'assist' ||
+                                                      this.mode === 'rescue');
 
-      this.mode = options.mode !== undefined ? options.mode : 'rescue';
-      assert("`mode` must be 'assist' or 'rescue'", this.mode === 'assist' ||
-                                                    this.mode === 'rescue');
-
-      var active = options.active !== undefined ? options.active : true;
-      if (active) this.activate();
-    };
-
-    RequestConnector.prototype = {
-      constructor: RequestConnector,
+        var active = options.active !== undefined ? options.active : true;
+        if (active) this.activate();
+      },
 
       activate: function() {
         var _this = this,
@@ -1654,7 +1798,7 @@ define("orbit/request-connector",
       isActive: function() {
         return this._active;
       }
-    };
+    });
 
     __exports__["default"] = RequestConnector;
   });
@@ -1730,16 +1874,12 @@ define("orbit/requestable",
     __exports__["default"] = Requestable;
   });
 define("orbit/transaction", 
-  ["exports"],
-  function(__exports__) {
+  ["./lib/objects","exports"],
+  function(__dependency1__, __exports__) {
     "use strict";
-    var Transaction = function() {
-      this.init.apply(this, arguments);
-    };
+    var Class = __dependency1__.Class;
 
-    Transaction.prototype = {
-      constructor: Transaction,
-
+    var Transaction = Class.extend({
       init: function(source, options) {
         this.source = source;
 
@@ -1781,7 +1921,7 @@ define("orbit/transaction",
         this.ops.push(op);
         this.inverseOps.push.apply(this.inverseOps, inverseOps);
       }
-    };
+    });
 
     __exports__["default"] = Transaction;
   });
@@ -1790,6 +1930,7 @@ define("orbit/transform-connector",
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __exports__) {
     "use strict";
     var ActionQueue = __dependency1__["default"];
+    var Class = __dependency2__.Class;
     var clone = __dependency2__.clone;
     var diffs = __dependency3__.diffs;
     var eq = __dependency4__.eq;
@@ -1831,20 +1972,18 @@ define("orbit/transform-connector",
      @param {Boolean} [options.active=true] Is the connector is actively observing the `source`?
      @constructor
      */
-    var TransformConnector = function(source, target, options) {
-      this.source = source;
-      this.target = target;
-      this.transformQueue = new ActionQueue(this.transform, this, {autoProcess: false});
+    var TransformConnector = Class.extend({
+      init: function(source, target, options) {
+        this.source = source;
+        this.target = target;
+        this.transformQueue = new ActionQueue(this.transform, this, {autoProcess: false});
 
-      options = options || {};
-      this.blocking = options.blocking !== undefined ? options.blocking : true;
-      var active = options.active !== undefined ? options.active : true;
+        options = options || {};
+        this.blocking = options.blocking !== undefined ? options.blocking : true;
+        var active = options.active !== undefined ? options.active : true;
 
-      if (active) this.activate();
-    };
-
-    TransformConnector.prototype = {
-      constructor: TransformConnector,
+        if (active) this.activate();
+      },
 
       activate: function() {
         var _this = this;
@@ -1937,7 +2076,7 @@ define("orbit/transform-connector",
 
         return this.transform(operation);
       }
-    };
+    });
 
     __exports__["default"] = TransformConnector;
   });
