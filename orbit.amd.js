@@ -1421,8 +1421,9 @@ define("orbit/lib/objects",
 
      ```javascript
      var CelestialObject = Class.extend({
-       init: function() {
+       init: function(name) {
          this._super();
+         this.name = name;
          this.isCelestialObject = true;
        },
        greeting: function() {
@@ -1431,8 +1432,8 @@ define("orbit/lib/objects",
      });
 
      var Planet = CelestialObject.extend({
-       init: function() {
-         this._super();
+       init: function(name) {
+         this._super.apply(this, arguments);
          this.isPlanet = true;
        },
        greeting: function() {
@@ -1440,8 +1441,7 @@ define("orbit/lib/objects",
        },
      });
 
-     var earth = new Planet();
-     earth.name = 'Earth';
+     var earth = new Planet('Earth');
 
      console.log(earth instanceof Class);           // true
      console.log(earth instanceof CelestialObject); // true
@@ -2013,7 +2013,7 @@ define("orbit/transform-connector",
         if (this.target.retrieve) {
           var currentValue = this.target.retrieve(operation.path);
 
-          if (currentValue) {
+          if (currentValue !== null) {
             if (operation.op === 'add' || operation.op === 'replace') {
               if (eq(currentValue, operation.value)) {
                 //TODO-log  console.log('==', ' transform from ', this.source.id, ' to ', this.target.id, operation);

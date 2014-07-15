@@ -34,6 +34,7 @@ define("orbit-common/cache",
     "use strict";
     var Document = __dependency1__["default"];
     var Evented = __dependency2__["default"];
+    var Class = __dependency3__.Class;
     var expose = __dependency3__.expose;
     var isArray = __dependency3__.isArray;
     var OperationNotAllowed = __dependency4__.OperationNotAllowed;
@@ -57,13 +58,7 @@ define("orbit-common/cache",
      @param {Boolean} [options.trackRevLinkChanges=false] Should the `didTransform` event be triggered after `__rev` is updated?
      @constructor
      */
-    var Cache = function() {
-      this.init.apply(this, arguments);
-    };
-
-    Cache.prototype = {
-      constructor: Cache,
-
+    var Cache = Class.extend({
       init: function(schema, options) {
         options = options || {};
         this.trackChanges = options.trackChanges !== undefined ? options.trackChanges : true;
@@ -354,23 +349,18 @@ define("orbit-common/cache",
           console.log('Cache._transformRef() exception', e, 'for operation', operation);
         }
       }
-    };
+    });
 
     __exports__["default"] = Cache;
   });
 define("orbit-common/id-map", 
-  ["orbit/lib/assert","exports"],
-  function(__dependency1__, __exports__) {
+  ["orbit/lib/assert","orbit/lib/objects","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
     "use strict";
     var assert = __dependency1__.assert;
+    var Class = __dependency2__.Class;
 
-    var IdMap = function() {
-      this.init.apply(this, arguments);
-    };
-
-    IdMap.prototype = {
-      constructor: IdMap,
-
+    var IdMap = Class.extend({
       init: function(idField, remoteIdField) {
         assert("IdMap's `idField` must be specified", idField);
         assert("IdMap's `remoteIdField` must be specified", remoteIdField);
@@ -437,7 +427,7 @@ define("orbit-common/id-map",
           if (mapForType) return mapForType[id];
         }
       }
-    };
+    });
 
     __exports__["default"] = IdMap;
   });
@@ -777,6 +767,7 @@ define("orbit-common/schema",
   ["orbit/lib/objects","./lib/exceptions","orbit/evented","./id-map","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
+    var Class = __dependency1__.Class;
     var clone = __dependency1__.clone;
     var OperationNotAllowed = __dependency2__.OperationNotAllowed;
     var Evented = __dependency3__["default"];
@@ -834,13 +825,7 @@ define("orbit-common/schema",
      @param {Object}   [options.models] schemas for individual models supported by this schema
      @constructor
      */
-    var Schema = function() {
-      this.init.apply(this, arguments);
-    };
-
-    Schema.prototype = {
-      constructor: Schema,
-
+    var Schema = Class.extend({
       init: function(options) {
         options = options || {};
         this.idField = options.idField !== undefined ? options.idField : '__id';
@@ -976,7 +961,7 @@ define("orbit-common/schema",
         // TODO - allow for pluggable inflector
         return name + 's';
       }
-    };
+    });
 
     __exports__["default"] = Schema;
   });
