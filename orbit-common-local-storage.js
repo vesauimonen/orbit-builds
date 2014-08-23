@@ -82,5 +82,5 @@ define("orbit-common/local-storage-source",
 
     __exports__["default"] = LocalStorageSource;
   });
-global.OC.LocalStorageSource = requireModule('orbit-common/local-storage-source');
+global.OC.LocalStorageSource = requireModule("orbit-common/local-storage-source")["default"];
 }(window));

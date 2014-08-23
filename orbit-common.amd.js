@@ -1,20 +1,22 @@
 define("orbit-common", 
-  ["orbit-common/main","orbit-common/cache","orbit-common/id-map","orbit-common/schema","orbit-common/source","orbit-common/memory-source","orbit-common/lib/exceptions","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __exports__) {
+  ["orbit-common/main","orbit-common/cache","orbit-common/id-map","orbit-common/schema","orbit-common/serializer","orbit-common/source","orbit-common/memory-source","orbit-common/lib/exceptions","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __exports__) {
     "use strict";
     var OC = __dependency1__["default"];
     var Cache = __dependency2__["default"];
     var IdMap = __dependency3__["default"];
     var Schema = __dependency4__["default"];
-    var Source = __dependency5__["default"];
-    var MemorySource = __dependency6__["default"];
-    var OperationNotAllowed = __dependency7__.OperationNotAllowed;
-    var RecordNotFoundException = __dependency7__.RecordNotFoundException;
-    var LinkNotFoundException = __dependency7__.LinkNotFoundException;
-    var RecordAlreadyExistsException = __dependency7__.RecordAlreadyExistsException;
+    var Serializer = __dependency5__["default"];
+    var Source = __dependency6__["default"];
+    var MemorySource = __dependency7__["default"];
+    var OperationNotAllowed = __dependency8__.OperationNotAllowed;
+    var RecordNotFoundException = __dependency8__.RecordNotFoundException;
+    var LinkNotFoundException = __dependency8__.LinkNotFoundException;
+    var RecordAlreadyExistsException = __dependency8__.RecordAlreadyExistsException;
 
     OC.Cache = Cache;
     OC.Schema = Schema;
+    OC.Serializer = Serializer;
     OC.Source = Source;
     OC.MemorySource = MemorySource;
     // exceptions
@@ -86,7 +88,7 @@ define("orbit-common/cache",
 
       reset: function(data) {
         this._doc.reset(data);
-        this.schema.registerAllIds(data);
+        this.schema.registerAllKeys(data);
       },
 
       /**
@@ -350,84 +352,6 @@ define("orbit-common/cache",
 
     __exports__["default"] = Cache;
   });
-define("orbit-common/id-map", 
-  ["orbit/lib/assert","orbit/lib/objects","exports"],
-  function(__dependency1__, __dependency2__, __exports__) {
-    "use strict";
-    var assert = __dependency1__.assert;
-    var Class = __dependency2__.Class;
-
-    var IdMap = Class.extend({
-      init: function(idField, remoteIdField) {
-        assert("IdMap's `idField` must be specified", idField);
-        assert("IdMap's `remoteIdField` must be specified", remoteIdField);
-
-        this.idField = idField;
-        this.remoteIdField = remoteIdField;
-        this.reset();
-      },
-
-      reset: function() {
-        this._remoteToLocal = {};
-        this._localToRemote = {};
-      },
-
-      register: function(type, id, remoteId) {
-        if (id && remoteId) {
-          var remoteToLocal = this._remoteToLocal[type];
-          if (!remoteToLocal) remoteToLocal = this._remoteToLocal[type] = {};
-          remoteToLocal[remoteId] = id;
-
-          var localToRemote = this._localToRemote[type];
-          if (!localToRemote) localToRemote = this._localToRemote[type] = {};
-          localToRemote[id] = remoteId;
-        }
-      },
-
-      registerAll: function(data) {
-        if (data) {
-          var _this = this,
-              remoteToLocal,
-              localToRemote,
-              record,
-              remoteId;
-
-          Object.keys(data).forEach(function(type) {
-            remoteToLocal = _this._remoteToLocal[type];
-            if (!remoteToLocal) remoteToLocal = _this._remoteToLocal[type] = {};
-
-            localToRemote = _this._localToRemote[type];
-            if (!localToRemote) localToRemote = _this._localToRemote[type] = {};
-
-            var typeData = data[type];
-            Object.keys(typeData).forEach(function(id) {
-              remoteId = typeData[id][_this.remoteIdField];
-              if (remoteId) {
-                remoteToLocal[remoteId] = id;
-                localToRemote[id] = remoteId;
-              }
-            });
-          });
-        }
-      },
-
-      remoteToLocalId: function(type, remoteId) {
-        if (remoteId) {
-          var mapForType = this._remoteToLocal[type];
-          if (mapForType) return mapForType[remoteId];
-        }
-      },
-
-      localToRemoteId: function(type, id) {
-        if (id) {
-          var mapForType = this._localToRemote[type];
-          if (mapForType) return mapForType[id];
-        }
-      }
-    });
-
-    __exports__["default"] = IdMap;
-  });
 define("orbit-common/lib/exceptions", 
   ["exports"],
   function(__exports__) {
@@ -581,8 +505,8 @@ define("orbit-common/memory-source",
 
       _find: function(type, id) {
         var _this = this,
-            idField = this.schema.idField,
-            remoteIdField = this.schema.remoteIdField,
+            modelSchema = this.schema.models[type],
+            pk = modelSchema.primaryKey.name,
             result;
 
         return new Orbit.Promise(function(resolve, reject) {
@@ -600,11 +524,7 @@ define("orbit-common/memory-source",
             for (var i = 0, l = id.length; i < l; i++) {
               resId =  id[i];
 
-              if (typeof resId === 'object' && resId[remoteIdField]) {
-                res = _this._filterOne.call(_this, type, remoteIdField, resId[remoteIdField]);
-              } else {
-                res =  _this.retrieve([type, resId]);
-              }
+              res =  _this.retrieve([type, resId]);
 
               if (res) {
                 result.push(res);
@@ -618,12 +538,9 @@ define("orbit-common/memory-source",
               id = notFound;
             }
 
-          } else if (typeof id === 'object') {
-            if (id[idField]) {
-              result = _this.retrieve([type, id[idField]]);
-
-            } else if (id[remoteIdField]) {
-              result = _this._filterOne.call(_this, type, remoteIdField, id[remoteIdField]);
+          } else if (id !== null && typeof id === 'object') {
+            if (id[pk]) {
+              result = _this.retrieve([type, id[pk]]);
 
             } else {
               result = _this._filter.call(_this, type, id);
@@ -641,61 +558,33 @@ define("orbit-common/memory-source",
         });
       },
 
-      _findLink: function(type, id, key) {
-        var _this = this,
-            idField = this.schema.idField,
-            record;
+      _findLink: function(type, id, link) {
+        var _this = this;
 
         return new Orbit.Promise(function(resolve, reject) {
-          if (typeof id === 'object') {
-            record = _this.retrieve([type, id[idField]]);
+          id = _this.getId(type, id);
 
-          } else {
-            record = _this.retrieve([type, id]);
-          }
+          var record = _this.retrieve([type, id]);
 
           if (record) {
-            var result;
+            var relId;
 
             if (record.__rel) {
-              result = record.__rel[key];
+              relId = record.__rel[link];
 
-              if (result) {
-                var linkDef = _this.schema.models[type].links[key],
-                    relatedModel = linkDef.model;
-
+              if (relId) {
+                var linkDef = _this.schema.models[type].links[link];
                 if (linkDef.type === 'hasMany') {
-                  var relatedIds = Object.keys(result),
-                      relatedRecord,
-                      notFound;
-
-                  result = [];
-                  notFound = [];
-
-                  relatedIds.forEach(function(relatedId) {
-                    relatedRecord = _this.retrieve([relatedModel, relatedId]);
-                    if (relatedRecord) {
-                      result.push(relatedRecord);
-                    } else {
-                      notFound.push(relatedRecord);
-                    }
-                  });
-
-                  if (notFound.length > 0) {
-                    result = null;
-                  }
-
-                } else {
-                  result = _this.retrieve([relatedModel, result]);
+                  relId = Object.keys(relId);
                 }
               }
             }
 
-            if (result) {
-              resolve(result);
+            if (relId) {
+              resolve(relId);
 
             } else {
-              reject(new LinkNotFoundException(type, id, key));
+              reject(new LinkNotFoundException(type, id, link));
             }
 
           } else {
@@ -761,88 +650,303 @@ define("orbit-common/memory-source",
     __exports__["default"] = MemorySource;
   });
 define("orbit-common/schema", 
-  ["orbit/lib/objects","./lib/exceptions","orbit/evented","./id-map","exports"],
+  ["orbit/lib/objects","orbit/lib/uuid","./lib/exceptions","orbit/evented","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
     var Class = __dependency1__.Class;
     var clone = __dependency1__.clone;
-    var OperationNotAllowed = __dependency2__.OperationNotAllowed;
-    var Evented = __dependency3__["default"];
-    var IdMap = __dependency4__["default"];
+    var extend = __dependency1__.extend;
+    var uuid = __dependency2__.uuid;
+    var OperationNotAllowed = __dependency3__.OperationNotAllowed;
+    var Evented = __dependency4__["default"];
 
     /**
-     `Schema`
+     `Schema` defines the models allowed in a source, including their keys,
+     attributes and relationships. A single schema may be shared across multiple
+     sources.
 
-     Defines the models, attributes and relationships allowed in a source.
-
-     A `Schema` also defines an ID field (`__id` by default) that is used across all
-     Orbit sources to uniquely identify records.
-
-     Unique IDs are specified with `generateId`. The default implementation of this
-     method generates locally unique IDs ('TIMESTAMP.COUNTER'). If your server
-     accepts UUIDs, you may wish to generate IDs client-side by setting `idField` to
-     match your remote ID field and replace `generateID` with a UUID generator.
-
-     Models should be keyed by their singular name, and should be defined as an
-     object that optionally contains `attributes` and/or `links`.
-
-     TODO - further specs needed for models
-
-     @example
+     Schemas are defined with an initial set of options, passed in as a constructor
+     argument:
 
      ``` javascript
-     var schema = new Schema({
-       models: {
-         planet: {
-           attributes: {
-             name: {type: 'string'},
-             classification: {type: 'string'}
-           },
-           links: {
-             moons: {type: 'hasMany', model: 'moon', inverse: 'planet'}
-           }
-         },
-         moon: {
-           attributes: {
-             name: {type: 'string'}
-           },
-           links: {
-             planet: {type: 'hasOne', model: 'planet', inverse: 'moons'}
-           }
-         }
-       }
-     });
+      var schema = new Schema({
+        models: {
+          planet: {
+            attributes: {
+              name: {type: 'string'},
+              classification: {type: 'string'}
+            },
+            links: {
+              moons: {type: 'hasMany', model: 'moon', inverse: 'planet'}
+            }
+          },
+          moon: {
+            attributes: {
+              name: {type: 'string'}
+            },
+            links: {
+              planet: {type: 'hasOne', model: 'planet', inverse: 'moons'}
+            }
+          }
+        }
+      });
      ```
 
+     Models should be keyed by their singular name, and should be defined as an
+     object that contains `attributes` and/or `links`.
+
+     Models can be registered after a schema's been initialized with
+     `registerModel`.
+
+     ## Fields
+
+     There are three broad categories of fields available for models: keys,
+     attributes, and links.
+
+     Within each category, fields may be declared along with options appropriate
+     for the category. Common field options include:
+
+     * `type` - a classification, often category-specific, that defines a field's
+       purpose and/or contents.
+
+     * `defaultValue` - a value or function that returns a value, to be set on
+       record initialization when a field's value is `undefined`.
+
+     Default fields for models can be specified in a `modelDefaults` object. A
+     single primary key field, `id`, is defined by default (see below).
+
+     ### Keys
+
+     Keys uniquely identify a record of a particular model type.
+
+     Keys may only be of type `"string"`, which is also the default and therefore 
+     unnecessary to declare.
+
+     Every model must define a single "primary key", which will be used throughout
+     Orbit to identify records of that type uniquely. This should be indicated with
+     the field option `primaryKey: true`.
+
+     By default, `modelDefaults` define a primary key `id` to be used for all
+     models:
+
+     ```
+      {
+        keys: {
+          'id': {primaryKey: true, defaultValue: uuid}
+        }
+      }
+     ```
+
+     The default primary key has a v4 UUID generator assigned as its `defaultValue`.
+     Because of this, these keys can be used within Orbit and on remote servers with
+     an extremely low probability of a conflict.
+
+     When working with remote servers that do not support UUID primary keys, it's
+     necessary to correlate Orbit IDs with IDs that are generated remotely. In order
+     to support this scenario, one or more "secondary keys" may also be defined for
+     a model.
+
+     Let's say that you want to track Orbit's primary key locally as a UUID named
+     `__id` and also define a remote key named `id`. You could define `modelDefaults`
+     in your schema as follows:
+
+     ```
+      var schema = new Schema({
+        modelDefaults: {
+          keys: {
+            '__id': {primaryKey: true, defaultValue: uuid},
+            'id': {}
+          }
+        }
+      });
+     ```
+
+     The `id` field above is considered a secondary key because `primaryKey` is
+     `false` by default.
+
+     When any secondary keys are defined, the schema will maintain a mapping of
+     secondary to primary key values that can be shared by all sources. This
+     centralized mapping assumes that key values will never change once set, which
+     is a realistic assumption for distributed systems.
+
+     ### Attributes
+
+     Any properties that define a model's data, with the exception of links to other
+     models, should be defined as "attributes".
+
+     Attributes may be defined by their `type`, such as `"string"` or `"date"`,
+     which can be used to define their purpose and contents. An attribute's type may
+     also be used to determine how it should be normalized and serialized.
+
+     ### Links
+
+     Links are properties that define relationships between models. Two types of links
+     are currently allowed:
+
+     * `hasOne` - for one-to-one relationships
+     * `hasMany` - for one-to-many relationships
+
+     Links must define the related `model` and may optionally define their
+     `inverse`, which should correspond to the name of a link on the related model.
+     Inverse links should be defined when links must be kept synchronized, so that
+     adding or removing a link on the primary model results in a corresponding
+     change on the inverse model.
+
+     Here's an example of a schema definition that includes links with inverses:
+
+     ```
+      var schema = new Schema({
+        models: {
+          planet: {
+            links: {
+              moons: {type: 'hasMany', model: 'moon', inverse: 'planet'}
+            }
+          },
+          moon: {
+            links: {
+              planet: {type: 'hasOne', model: 'planet', inverse: 'moons'}
+            }
+          }
+        }
+      });
+     ```
+
+     ## Model Defaults
+
+     The `modelDefaults` object defines a default model schema for ALL models in the
+     schema. This is useful for defining the default ID attribute and any other
+     attributes or links that are present across models in the schema.
+
+     As discussed above, `modelDefaults` defines a single primary key by default.
+     `modelDefaults` can be overridden to include any number of attributes and links.
+     For instance:
+
+     ```
+      var schema = new Schema({
+        modelDefaults: {
+          keys: {
+            __id: {primaryKey: true, defaultValue: uuid}
+          },
+          attributes: {
+            createdAt: {type: 'date', defaultValue: currentTime}
+          }
+        }
+      });
+     ```
+     
+     The default fields can be overridden in or removed from any particular model
+     definition. To remove any key, attribute or link definition inherited from
+     `modelDefaults` simply define the field with a falsey value (`undefined`,
+     `null`, or `false`).
+
+     For example, the following schema removes `createdAt` from the `planet` model:
+
+     ```
+      var schema = new Schema({
+        modelDefaults: {
+          keys: {
+            __id: {primaryKey: true, defaultValue: uuid}
+          },
+          attributes: {
+            createdAt: {type: 'date', defaultValue: currentTime}
+          }
+        },
+        models: {
+          planet: {
+            attributes: {
+              name: {type: 'string'},
+              createdAt: undefined
+            }
+          }
+        }
+      });
+     ```
+     
      @class Schema
      @namespace OC
      @param {Object}   [options]
-     @param {String}   [options.idField='__id'] Name of field that uniquely identifies records throughout Orbit
-     @param {Function} [options.generateId] ID generator (the default generator ensures locally unique IDs but not UUIDs)
+     @param {Object}   [options.modelDefaults] defaults for model schemas
+     @param {Function} [options.pluralize] Function used to pluralize names
+     @param {Function} [options.singularize] Function used to singularize names
      @param {Object}   [options.models] schemas for individual models supported by this schema
      @constructor
      */
     var Schema = Class.extend({
       init: function(options) {
         options = options || {};
-        this.idField = options.idField !== undefined ? options.idField : '__id';
-        this.remoteIdField = options.remoteIdField !== undefined ? options.remoteIdField : 'id';
-        this.models = options.models !== undefined ? options.models : {};
-        if (options.generateId) {
-          this.generateId = options.generateId;
+        // model defaults
+        if (options.modelDefaults) {
+          this.modelDefaults = options.modelDefaults;
+        } else {
+          this.modelDefaults = {
+            keys: {
+              'id': {primaryKey: true, defaultValue: uuid}
+            }
+          };
         }
-        if (this.idField !== this.remoteIdField) {
-          this._idMap = new IdMap(this.idField, this.remoteIdField);
+        // inflection
+        if (options.pluralize) {
+          this.pluralize = options.pluralize;
         }
+        if (options.singularize) {
+          this.singularize = options.singularize;
+        }
+
         Evented.extend(this);
+
+        // register provided model schema
+        this.models = {};
+        if (options.models) {
+          for (var model in options.models) {
+            if (options.models.hasOwnProperty(model)) {
+              this.registerModel(model, options.models[model]);
+            }
+          }
+        }
       },
 
-      registerModel: function(type, definition) {
-        this.models[type] = definition;
-        this.emit('modelRegistered', type);
+      registerModel: function(model, definition) {
+        var modelSchema = this._mergeModelSchemas({}, this.modelDefaults, definition);
+
+        // process key definitions
+        for (var name in modelSchema.keys) {
+          var key = modelSchema.keys[name];
+
+          key.name = name;
+          
+          if (key.primaryKey) {
+            if (modelSchema.primaryKey) {
+              throw new OperationNotAllowed('Schema can only define one primaryKey per model');
+            }
+            modelSchema.primaryKey = key;
+          
+          } else {
+            key.primaryKey = false;
+
+            key.secondaryToPrimaryKeyMap = {};
+            key.primaryToSecondaryKeyMap = {};
+
+            modelSchema.secondaryKeys = modelSchema.secondaryKeys || {};
+            modelSchema.secondaryKeys[name] = key;
+          }
+
+          key.type = key.type || 'string';
+          if (key.type !== 'string') {
+            throw new OperationNotAllowed('Model keys must be of type `"string"`');
+          }
+        }
+
+        // ensure every model has a valid primary key
+        if (!modelSchema.primaryKey || typeof modelSchema.primaryKey.defaultValue !== 'function') {
+          throw new OperationNotAllowed('Model schema ID defaultValue must be a function');
+        }
+
+        this.models[model] = modelSchema;
+
+        this.emit('modelRegistered', model);
       },
 
-      normalize: function(type, data) {
+      normalize: function(model, data) {
         if (data.__normalized) return data;
 
         var record = data; // TODO? clone(data);
@@ -850,59 +954,45 @@ define("orbit-common/schema",
         // set flag
         record.__normalized = true;
 
-        // init id
-        if (this._idMap) {
-          var id = record[this.idField];
-          var remoteId = record[this.remoteIdField];
-
-          if (id === undefined) {
-            if (remoteId) {
-              id = this._idMap.remoteToLocalId(type, remoteId);
-            }
-            id = id || this.generateId();
-
-            record[this.idField] = id;
-          }
-
-          this._idMap.register(type, id, remoteId);
-
-        } else {
-          record[this.idField] = record[this.idField] || this.generateId();
-        }
-
         // init backward links
         record.__rev = record.__rev || {};
 
         // init forward links
         record.__rel = record.__rel || {};
 
-        this.initDefaults(type, record);
+        // init meta info
+        record.__meta = record.__meta || {};
+
+        this.initDefaults(model, record);
 
         return record;
       },
 
-      initDefaults: function(type, record) {
+      initDefaults: function(model, record) {
         if (!record.__normalized) {
           throw new OperationNotAllowed('Schema.initDefaults requires a normalized record');
         }
 
-        var modelSchema = this.models[type],
+        var modelSchema = this.models[model],
+            keys = modelSchema.keys,
             attributes = modelSchema.attributes,
             links = modelSchema.links;
+
+        // init primary key - potentially setting the primary key from secondary keys if necessary
+        this._initPrimaryKey(modelSchema, record);
+
+        // init default key values
+        for (var key in keys) {
+          if (record[key] === undefined) {
+            record[key] = this._defaultValue(record, keys[key].defaultValue, null);
+          }
+        }
 
         // init default attribute values
         if (attributes) {
           for (var attribute in attributes) {
             if (record[attribute] === undefined) {
-              if (attributes[attribute].defaultValue !== undefined) {
-                if (typeof attributes[attribute].defaultValue === 'function') {
-                  record[attribute] = attributes[attribute].defaultValue.call(record);
-                } else {
-                  record[attribute] = attributes[attribute].defaultValue;
-                }
-              } else {
-                record[attribute] = null;
-              }
+              record[attribute] = this._defaultValue(record, attributes[attribute].defaultValue, null);
             }
           }
         }
@@ -911,56 +1001,191 @@ define("orbit-common/schema",
         if (links) {
           for (var link in links) {
             if (record.__rel[link] === undefined) {
-              if (links[link].type === 'hasMany') {
-                record.__rel[link] = {};
-              } else {
-                record.__rel[link] = null;
+              record.__rel[link] = this._defaultValue(record, 
+                                                      links[link].defaultValue,
+                                                      links[link].type === 'hasMany' ? {} : null);
+            }
+          }
+        }
+
+        this._mapKeys(modelSchema, record);
+      },
+
+      primaryToSecondaryKey: function(model, secondaryKeyName, primaryKeyValue, autoGenerate) {
+        var modelSchema = this.models[model];
+        var secondaryKey = modelSchema.keys[secondaryKeyName];
+
+        var value = secondaryKey.primaryToSecondaryKeyMap[primaryKeyValue];
+
+        // auto-generate secondary key if necessary, requested, and possible
+        if (value === undefined && autoGenerate && secondaryKey.defaultValue) {
+          value = secondaryKey.defaultValue();
+          this._registerKeyMapping(secondaryKey, primaryKeyValue, value);
+        }
+
+        return value;
+      },
+
+      secondaryToPrimaryKey: function(model, secondaryKeyName, secondaryKeyValue, autoGenerate) {
+        var modelSchema = this.models[model];
+        var secondaryKey = modelSchema.keys[secondaryKeyName];
+
+        var value = secondaryKey.secondaryToPrimaryKeyMap[secondaryKeyValue];
+
+        // auto-generate primary key if necessary, requested, and possible
+        if (value === undefined && autoGenerate && modelSchema.primaryKey.defaultValue) {
+          value = modelSchema.primaryKey.defaultValue();
+          this._registerKeyMapping(secondaryKey, value, secondaryKeyValue);
+        }
+
+        return value;
+      },
+
+      // TODO - test
+      registerAllKeys: function(data) {
+        if (data) {
+          Object.keys(data).forEach(function(type) {
+            var modelSchema = this.models[type];
+
+            if (modelSchema && modelSchema.secondaryKeys) {
+              var records = data[type];
+
+              records.forEach(function(record) {
+                var id = record[modelSchema.primaryKey.name],
+                    altId;
+
+                Object.keys(modelSchema.secondaryKeys).forEach(function(secondaryKey) {
+                  altId = record[secondaryKey];
+                  if (altId !== undefined && altId !== null) {
+                    var secondaryKeyDef = modelSchema.secondaryKeys[secondaryKey];
+                    this._registerKeyMapping(secondaryKeyDef, id, altId);
+                  }
+                }, this);
+              }, this);
+            }
+          }, this);
+        }
+      },
+
+      pluralize: function(word) {
+        return word + 's';
+      },
+
+      singularize: function(word) {
+        if (word.lastIndexOf('s') === word.length - 1) {
+          return word.substr(0, word.length - 1);
+        } else {
+          return word;
+        }
+      },
+
+      _defaultValue: function(record, value, defaultValue) {
+        if (value === undefined) {
+          return defaultValue;
+
+        } else if (typeof value === 'function') {
+          return value.call(record);
+
+        } else {
+          return value;
+        }
+      },
+
+      _initPrimaryKey: function(modelSchema, record) {
+        var pk = modelSchema.primaryKey.name;
+        var id = record[pk];
+
+        // init primary key from secondary keys
+        if (!id && modelSchema.secondaryKeys) {
+          var keyNames = Object.keys(modelSchema.secondaryKeys);
+          for (var i in keyNames) {
+            var key = modelSchema.keys[keyNames[i]];
+            var value = record[key.name];
+            if (value) {
+              id = key.secondaryToPrimaryKeyMap[value];
+              if (id) { 
+                record[pk] = id;
+                return;
               }
             }
           }
         }
       },
 
-      generateId: function() {
-        if (this._newId === undefined) this._newId = 0;
-        return new Date().getTime() + '.' + (this._newId++).toString();
-      },
+      _mapKeys: function(modelSchema, record) {
+        var id = record[modelSchema.primaryKey.name];
 
-      remoteToLocalId: function(type, remoteId) {
-        if (this._idMap) {
-          return this._idMap.remoteToLocalId(type, remoteId);
-        } else {
-          return remoteId;
+        if (modelSchema.secondaryKeys) {
+          Object.keys(modelSchema.secondaryKeys).forEach(function(name) {
+            var value = record[name];
+            if (value) {
+              var key = modelSchema.secondaryKeys[name];
+              this._registerKeyMapping(key, id, value);
+            }
+          }, this);
         }
       },
 
-      localToRemoteId: function(type, id) {
-        if (this._idMap) {
-          return this._idMap.localToRemoteId(type, id);
-        } else {
-          return id;
-        }
+      _registerKeyMapping: function(secondaryKeyDef, primaryValue, secondaryValue) {
+        secondaryKeyDef.primaryToSecondaryKeyMap[primaryValue] = secondaryValue;
+        secondaryKeyDef.secondaryToPrimaryKeyMap[secondaryValue] = primaryValue;
       },
 
-      registerIds: function(type, record) {
-        if (this._idMap) {
-          this._idMap.register(type, record[this.idField], record[this.remoteIdField]);
-        }
+      _mergeModelSchemas: function(base) {
+        var sources = Array.prototype.slice.call(arguments, 1);
+
+        // ensure model schema has categories set
+        base.keys = base.keys || {};
+        base.attributes = base.attributes || {};
+        base.links = base.links || {};
+
+        sources.forEach(function(source) {
+          source = clone(source);
+          this._mergeModelFields(base.keys, source.keys);
+          this._mergeModelFields(base.attributes, source.attributes);
+          this._mergeModelFields(base.links, source.links);
+        }, this);
+
+        return base;
       },
 
-      registerAllIds: function(data) {
-        if (this._idMap && data) {
-          this._idMap.registerAll(data);
+      _mergeModelFields: function(base, source) {
+        if (source) {
+          Object.keys(source).forEach(function(field) {
+            if (source.hasOwnProperty(field)) {
+              var fieldDef = source[field];
+              if (fieldDef) {
+                base[field] = fieldDef;
+              } else {
+                // fields defined as falsey should be removed
+                delete base[field];
+              }
+            }
+          });
         }
-      },
-
-      pluralize: function(name) {
-        // TODO - allow for pluggable inflector
-        return name + 's';
       }
     });
 
     __exports__["default"] = Schema;
+  });
+define("orbit-common/serializer", 
+  ["orbit/lib/objects","orbit/lib/stubs","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
+    "use strict";
+    var Class = __dependency1__.Class;
+    var required = __dependency2__.required;
+
+    var Serializer = Class.extend({
+      init: function(schema) {
+        this.schema = schema;
+      },
+
+      serialize: required,
+
+      deserialize: required
+    });
+
+    __exports__["default"] = Serializer;
   });
 define("orbit-common/source", 
   ["orbit/document","orbit/transformable","orbit/requestable","orbit/lib/assert","orbit/lib/stubs","orbit/lib/objects","./cache","exports"],
@@ -987,7 +1212,6 @@ define("orbit-common/source",
     var Source = Class.extend({
       init: function(schema, options) {
         assert("Source's `schema` must be specified", schema);
-        assert("Source's `schema.idField` must be specified", schema.idField);
 
         this.schema = schema;
 
@@ -1000,7 +1224,9 @@ define("orbit-common/source",
         this._cache.on('didTransform', this._cacheDidTransform, this);
 
         Transformable.extend(this);
-        Requestable.extend(this, ['find', 'add', 'update', 'patch', 'remove', 'findLink', 'addLink', 'removeLink']);
+        Requestable.extend(this, ['find', 'add', 'update', 'patch', 'remove',
+                                  'findLink', 'addLink', 'removeLink',
+                                  'findLinked']);
       },
 
       /////////////////////////////////////////////////////////////////////////////
@@ -1030,10 +1256,31 @@ define("orbit-common/source",
 
       _findLink: required,
 
+      _findLinked: function(type, id, link, relId) {
+        var _this = this;
+        var linkDef = _this.schema.models[type].links[link];
+        var relType = linkDef.model;
+
+        id = this.getId(type, id);
+
+        if (relId === undefined) {
+          relId = this.retrieveLink(type, id, link);
+        }
+
+        if (relId) {
+          return this.find(relType, relId);
+
+        } else {
+          return this.findLink(type, id, link).then(function(relId) {
+            return _this.find(relType, relId);
+          });
+        }
+      },
+
       _add: function(type, data) {
         var record = this.normalize(type, data);
 
-        var id = this.getId(record),
+        var id = this.getId(type, record),
             path = [type, id],
             _this = this;
 
@@ -1045,7 +1292,7 @@ define("orbit-common/source",
       _update: function(type, data) {
         var record = this.normalize(type, data);
 
-        var id = this.getId(record),
+        var id = this.getId(type, record),
             path = [type, id],
             _this = this;
 
@@ -1055,9 +1302,9 @@ define("orbit-common/source",
       },
 
       _patch: function(type, id, property, value) {
-        if (typeof id === 'object') {
+        if (id !== null && typeof id === 'object') {
           var record = this.normalize(type, id);
-          id = this.getId(record);
+          id = this.getId(type, record);
         }
 
         return this.transform({
@@ -1068,9 +1315,9 @@ define("orbit-common/source",
       },
 
       _remove: function(type, id) {
-        if (typeof id === 'object') {
+        if (id !== null && typeof id === 'object') {
           var record = this.normalize(type, id);
-          id = this.getId(record);
+          id = this.getId(type, record);
         }
 
         return this.transform({op: 'remove', path: [type, id]});
@@ -1095,13 +1342,13 @@ define("orbit-common/source",
             _this = this;
 
         // Normalize ids
-        if (typeof id === 'object') {
+        if (id !== null && typeof id === 'object') {
           var record = this.normalize(type, id);
-          id = this.getId(record);
+          id = this.getId(type, record);
         }
-        if (typeof value === 'object') {
+        if (value !== null && typeof value === 'object') {
           var relatedRecord = this.normalize(linkDef.model, value);
-          value = this.getId(relatedRecord);
+          value = this.getId(linkDef.model, relatedRecord);
         }
 
         // Add link to primary resource
@@ -1134,13 +1381,13 @@ define("orbit-common/source",
             _this = this;
 
         // Normalize ids
-        if (typeof id === 'object') {
+        if (id !== null && typeof id === 'object') {
           record = this.normalize(type, id);
-          id = this.getId(record);
+          id = this.getId(type, record);
         }
-        if (typeof value === 'object') {
+        if (value !== null && typeof value === 'object') {
           var relatedRecord = this.normalize(linkDef.model, value);
-          value = this.getId(relatedRecord);
+          value = this.getId(linkDef.model, relatedRecord);
         }
 
         // Remove link from primary resource
@@ -1184,8 +1431,20 @@ define("orbit-common/source",
         return this.schema.initDefaults(type, record);
       },
 
-      getId: function(data) {
-        return data[this.schema.idField];
+      getId: function(type, data) {
+        if (data !== null && typeof data === 'object') {
+          return data[this.schema.models[type].primaryKey.name];
+        } else {
+          return data;
+        }
+      },
+
+      retrieveLink: function(type, id, link) {
+        var val = this.retrieve([type, id, '__rel', link]);
+        if (val !== null && typeof val === 'object') {
+          val = Object.keys(val);
+        }
+        return val;
       }
     });
 

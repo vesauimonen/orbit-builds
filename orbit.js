@@ -56,8 +56,8 @@ var define, requireModule, require, requirejs;
   define.seen = seen;
 })();
 define("orbit", 
-  ["orbit/main","orbit/action-queue","orbit/document","orbit/evented","orbit/notifier","orbit/requestable","orbit/request-connector","orbit/transaction","orbit/transformable","orbit/transform-connector","orbit/lib/assert","orbit/lib/config","orbit/lib/diffs","orbit/lib/eq","orbit/lib/exceptions","orbit/lib/objects","orbit/lib/strings","orbit/lib/stubs","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __dependency9__, __dependency10__, __dependency11__, __dependency12__, __dependency13__, __dependency14__, __dependency15__, __dependency16__, __dependency17__, __dependency18__, __exports__) {
+  ["orbit/main","orbit/action-queue","orbit/document","orbit/evented","orbit/notifier","orbit/requestable","orbit/request-connector","orbit/transaction","orbit/transformable","orbit/transform-connector","orbit/lib/assert","orbit/lib/config","orbit/lib/diffs","orbit/lib/eq","orbit/lib/exceptions","orbit/lib/objects","orbit/lib/strings","orbit/lib/stubs","orbit/lib/uuid","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __dependency9__, __dependency10__, __dependency11__, __dependency12__, __dependency13__, __dependency14__, __dependency15__, __dependency16__, __dependency17__, __dependency18__, __dependency19__, __exports__) {
     "use strict";
     var Orbit = __dependency1__["default"];
     var ActionQueue = __dependency2__["default"];
@@ -86,6 +86,7 @@ define("orbit",
     var capitalize = __dependency17__.capitalize;
     var noop = __dependency18__.noop;
     var required = __dependency18__.required;
+    var uuid = __dependency19__.uuid;
 
     Orbit.ActionQueue = ActionQueue;
     Orbit.Document = Document;
@@ -114,6 +115,7 @@ define("orbit",
     Orbit.capitalize = capitalize;
     Orbit.noop = noop;
     Orbit.required = required;
+    Orbit.uuid = uuid;
 
     __exports__["default"] = Orbit;
   });
@@ -133,8 +135,8 @@ define("orbit/action-queue",
      each call can vary in both value and length.
 
      If action calls return a promise, then that promise will be settled before the
-     next action is de-queued and call. If action calls don't return anything, then
-     the next action will be de-queued and called immediately.
+     next action is de-queued and called. If action calls don't return anything,
+     then the next action will be de-queued and called immediately.
 
      @example
 
@@ -156,7 +158,8 @@ define("orbit/action-queue",
      @param {Function} fn Function to be called in order to process actions
      @param {Object}   [context] Context in which `fn` should be called
      @param {Object}   [options]
-     @param {Boolean}  [options.autoProcess=true] Are actions automatically processed as soon as they are pushed?
+     @param {Boolean}  [options.autoProcess=true] Are actions automatically
+                       processed as soon as they are pushed?
      @constructor
      */
     var ActionQueue = Class.extend({
@@ -1084,7 +1087,7 @@ define("orbit/lib/diffs",
 
         var type = Object.prototype.toString.call(a);
         if (type === Object.prototype.toString.call(b)) {
-          if (typeof a === 'object') {
+          if (a !== null && typeof a === 'object') {
             var i,
                 d;
 
@@ -1397,6 +1400,7 @@ define("orbit/lib/objects",
               typeof destination[p] === 'function' &&
               typeof source[p] === 'function') {
 
+            /* jshint loopfunc:true */
             destination[p] =
               (function(destinationFn, sourceFn) {
                 return function() {
@@ -1595,6 +1599,44 @@ define("orbit/lib/stubs",
 
     __exports__.noop = noop;
     __exports__.required = required;
+  });
+define("orbit/lib/uuid", 
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    /**
+     * Fast UUID generator, RFC4122 version 4 compliant.
+     * @author Jeff Ward (jcward.com).
+     * @license MIT license
+     * @link http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/21963136#21963136
+     **/
+
+    /**
+     * ES 6 Module
+     * @author Andrew Hacking (ahacking@gmail.com)
+     *
+     **/
+    var lut = []; for (var i=0; i<256; i++) { lut[i] = (i<16?'0':'')+(i).toString(16); }
+
+    /**
+     `uuid` generates a Version 4 UUID using Jeff Wards high performance generator.
+
+     @method v4uuid
+     @for Orbit
+     @returns {String} a version 4 UUID
+     */
+    var uuid = function() {
+      var d0 = Math.random()*0xffffffff|0;
+      var d1 = Math.random()*0xffffffff|0;
+      var d2 = Math.random()*0xffffffff|0;
+      var d3 = Math.random()*0xffffffff|0;
+      return lut[d0&0xff]+lut[d0>>8&0xff]+lut[d0>>16&0xff]+lut[d0>>24&0xff]+'-'+
+        lut[d1&0xff]+lut[d1>>8&0xff]+'-'+lut[d1>>16&0x0f|0x40]+lut[d1>>24&0xff]+'-'+
+        lut[d2&0x3f|0x80]+lut[d2>>8&0xff]+'-'+lut[d2>>16&0xff]+lut[d2>>24&0xff]+
+        lut[d3&0xff]+lut[d3>>8&0xff]+lut[d3>>16&0xff]+lut[d3>>24&0xff];
+    };
+
+    __exports__.uuid = uuid;
   });
 define("orbit/main", 
   ["exports"],
@@ -2065,7 +2107,7 @@ define("orbit/transform-connector",
       },
 
       transform: function(operation) {
-        //TODO-log  console.log('****', ' transform from ', this.source.id, ' to ', this.target.id, operation);
+        // console.log('****', ' transform from ', this.source.id, ' to ', this.target.id, operation);
 
         if (this.target.retrieve) {
           var currentValue = this.target.retrieve(operation.path);
@@ -2073,7 +2115,7 @@ define("orbit/transform-connector",
           if (currentValue !== null) {
             if (operation.op === 'add' || operation.op === 'replace') {
               if (eq(currentValue, operation.value)) {
-                //TODO-log  console.log('==', ' transform from ', this.source.id, ' to ', this.target.id, operation);
+                // console.log('==', ' transform from ', this.source.id, ' to ', this.target.id, operation);
                 return;
               } else {
                 return this.resolveConflicts(operation.path, currentValue, operation.value);
@@ -2090,7 +2132,7 @@ define("orbit/transform-connector",
       resolveConflicts: function(path, currentValue, updatedValue) {
         var ops = diffs(currentValue, updatedValue, {basePath: path});
 
-        //TODO-log  console.log(this.target.id, 'resolveConflicts', path, currentValue, updatedValue, ops);
+        // console.log(this.target.id, 'resolveConflicts', path, currentValue, updatedValue, ops);
 
         return this.target.transform(ops);
       },
@@ -2107,7 +2149,7 @@ define("orbit/transform-connector",
       /////////////////////////////////////////////////////////////////////////////
 
       _processTransform: function(operation) {
-    //    console.log(this.target.id, 'processTransform', operation);
+        // console.log('****', ' processTransform from ', this.source.id, ' to ', this.target.id, operation);
 
         if (this.filterFunction) {
           if (!this.filterFunction(operation)) return;
@@ -2265,7 +2307,7 @@ define("orbit/transformable",
 
     __exports__["default"] = Transformable;
   });
-global.Orbit = requireModule('orbit');
+global.Orbit = requireModule("orbit")["default"];
 global.Orbit.__defineModule__ = define;
 global.Orbit.__requireModule__ = requireModule;
 }(window));
