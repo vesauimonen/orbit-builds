@@ -1396,14 +1396,15 @@ define("orbit/lib/objects",
       var sources = Array.prototype.slice.call(arguments, 1);
       sources.forEach(function(source) {
         for (var p in source) {
-          if (destination[p] &&
+          if (source.hasOwnProperty(p) &&
+              destination[p] &&
               typeof destination[p] === 'function' &&
               typeof source[p] === 'function') {
 
             /* jshint loopfunc:true */
             destination[p] =
               (function(destinationFn, sourceFn) {
-                return function() {
+                var wrapper = function() {
                   var prevSuper = this._super;
                   this._super = destinationFn;
 
@@ -1413,6 +1414,8 @@ define("orbit/lib/objects",
 
                   return ret;
                 };
+                wrapper.wrappedFunction = sourceFn;
+                return wrapper;
               })(destination[p], source[p]);
 
           } else {
@@ -1951,14 +1954,20 @@ define("orbit/requestable",
               }
             ).then(
               function(result) {
-                return object.settle.apply(object, ['did' + Action].concat(args).concat(result)).then(
+                args.unshift('did' + Action);
+                args.push(result);
+
+                return object.settle.apply(object, args).then(
                   function() {
                     return result;
                   }
                 );
               },
               function(error) {
-                return object.settle.apply(object, ['didNot' + Action].concat(args).concat(error)).then(
+                args.unshift('didNot' + Action);
+                args.push(error);
+
+                return object.settle.apply(object, args).then(
                   function() {
                     throw error;
                   }

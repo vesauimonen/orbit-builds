@@ -37,6 +37,15 @@ define("orbit-common/jsonapi-source",
         this.usePatch         = options.usePatch !== undefined ? options.usePatch : this.usePatch;
         this.SerializerClass  = options.SerializerClass || this.SerializerClass;
 
+        // If `SerializerClass` is obtained through the _super chain, dereference
+        // its wrapped function, which will be the constructor.
+        //
+        // Note: This is only necessary when retrieving a *constructor* from a
+        //       class hierarchy. Otherwise, `superWrapper` "just works".
+        if (this.SerializerClass && this.SerializerClass.wrappedFunction) {
+          this.SerializerClass = this.SerializerClass.wrappedFunction;
+        }
+
         this.serializer = new this.SerializerClass(schema);
 
         assert('Serializer must be an instance of OC.Serializer', this.serializer instanceof Serializer);
@@ -80,7 +89,7 @@ define("orbit-common/jsonapi-source",
           }
         }
 
-        throw new OperationNotAllowed('JSONAPISource#transform could not process operation: ' + operation.op + 
+        throw new OperationNotAllowed('JSONAPISource#transform could not process operation: ' + operation.op +
                                       ' with path: ' + operation.path.join('/'));
       },
 
@@ -304,7 +313,7 @@ define("orbit-common/jsonapi-source",
 
       _transformAddLinkWithPatch: function(operation) {
         var _this = this;
-        
+
         var type = operation.path[0];
         var id = operation.path[1];
         var link = operation.path[3];
@@ -413,7 +422,7 @@ define("orbit-common/jsonapi-source",
         var json = {};
         var resourceType = this.resourceType(type);
         json[resourceType] = serialized;
-     
+
         return this.ajax(this.resourceURL(type, id), 'PUT', {data: json}).then(
           function(raw) {
             _this._transformCache(operation);
@@ -539,10 +548,14 @@ define("orbit-common/jsonapi-source",
           // console.log('ajax start', method);
 
           if (hash.data && method !== 'GET') {
-            if (method === 'PATCH') {
-              hash.contentType = 'application/json-patch+json; charset=utf-8';
-            } else {
-              hash.contentType = 'application/vnd.api+json; charset=utf-8';
+            // If contentType has not been specified, use the appropriate type
+            // according to the JSON API spec
+            if (!hash.contentType) {
+              if (method === 'PATCH') {
+                hash.contentType = 'application/json-patch+json; charset=utf-8';
+              } else {
+                hash.contentType = 'application/vnd.api+json; charset=utf-8';
+              }
             }
             hash.data = JSON.stringify(hash.data);
           }

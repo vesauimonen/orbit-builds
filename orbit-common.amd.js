@@ -1,18 +1,17 @@
 define("orbit-common", 
-  ["orbit-common/main","orbit-common/cache","orbit-common/id-map","orbit-common/schema","orbit-common/serializer","orbit-common/source","orbit-common/memory-source","orbit-common/lib/exceptions","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __exports__) {
+  ["orbit-common/main","orbit-common/cache","orbit-common/schema","orbit-common/serializer","orbit-common/source","orbit-common/memory-source","orbit-common/lib/exceptions","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __exports__) {
     "use strict";
     var OC = __dependency1__["default"];
     var Cache = __dependency2__["default"];
-    var IdMap = __dependency3__["default"];
-    var Schema = __dependency4__["default"];
-    var Serializer = __dependency5__["default"];
-    var Source = __dependency6__["default"];
-    var MemorySource = __dependency7__["default"];
-    var OperationNotAllowed = __dependency8__.OperationNotAllowed;
-    var RecordNotFoundException = __dependency8__.RecordNotFoundException;
-    var LinkNotFoundException = __dependency8__.LinkNotFoundException;
-    var RecordAlreadyExistsException = __dependency8__.RecordAlreadyExistsException;
+    var Schema = __dependency3__["default"];
+    var Serializer = __dependency4__["default"];
+    var Source = __dependency5__["default"];
+    var MemorySource = __dependency6__["default"];
+    var OperationNotAllowed = __dependency7__.OperationNotAllowed;
+    var RecordNotFoundException = __dependency7__.RecordNotFoundException;
+    var LinkNotFoundException = __dependency7__.LinkNotFoundException;
+    var RecordAlreadyExistsException = __dependency7__.RecordAlreadyExistsException;
 
     OC.Cache = Cache;
     OC.Schema = Schema;
@@ -345,7 +344,8 @@ define("orbit-common/cache",
         try {
           this._transform(operation, this.trackRevLinkChanges);
         } catch(e) {
-          console.log('Cache._transformRef() exception', e, 'for operation', operation);
+          // TODO - verbose logging of transform exceptions
+          // console.log('Cache._transformRef() exception', e, 'for operation', operation);
         }
       }
     });
@@ -1098,12 +1098,12 @@ define("orbit-common/schema",
         // init primary key from secondary keys
         if (!id && modelSchema.secondaryKeys) {
           var keyNames = Object.keys(modelSchema.secondaryKeys);
-          for (var i in keyNames) {
+          for (var i=0, l = keyNames.length; i <l ; i++){
             var key = modelSchema.keys[keyNames[i]];
             var value = record[key.name];
             if (value) {
               id = key.secondaryToPrimaryKeyMap[value];
-              if (id) { 
+              if (id) {
                 record[pk] = id;
                 return;
               }
@@ -1278,6 +1278,8 @@ define("orbit-common/source",
       },
 
       _add: function(type, data) {
+        data = data || {};
+
         var record = this.normalize(type, data);
 
         var id = this.getId(type, record),
