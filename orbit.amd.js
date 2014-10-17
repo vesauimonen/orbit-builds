@@ -25,6 +25,7 @@ define("orbit",
     var extend = __dependency16__.extend;
     var extendClass = __dependency16__.extendClass;
     var isArray = __dependency16__.isArray;
+    var isObject = __dependency16__.isObject;
     var isNone = __dependency16__.isNone;
     var capitalize = __dependency17__.capitalize;
     var noop = __dependency18__.noop;
@@ -54,6 +55,7 @@ define("orbit",
     Orbit.extend = extend;
     Orbit.extendClass = extendClass;
     Orbit.isArray = isArray;
+    Orbit.isObject = isObject;
     Orbit.isNone = isNone;
     Orbit.capitalize = capitalize;
     Orbit.noop = noop;
@@ -125,15 +127,11 @@ define("orbit/action-queue",
         var _this = this,
             args = arguments;
 
-        var response = new Orbit.Promise(function(resolve) {
+        var response = new Orbit.Promise(function(resolve, reject) {
           var action = function() {
             var ret = _this.fn.apply(_this.context, args);
             if (ret) {
-              return ret.then(
-                function() {
-                  resolve();
-                }
-              );
+              return ret.then(resolve, reject);
             } else {
               resolve();
             }
@@ -1480,9 +1478,21 @@ define("orbit/lib/objects",
     };
 
     /**
+     Checks whether a value is a non-null object
+
+     @method isObject
+     @for Orbit
+     @param {Object} obj
+     @returns {boolean}
+     */
+    var isObject = function(obj) {
+      return obj !== null && typeof obj === 'object';
+    };
+
+    /**
      Checks whether an object is null or undefined
 
-     @method isArray
+     @method isNone
      @for Orbit
      @param {Object} obj
      @returns {boolean}
@@ -1498,6 +1508,7 @@ define("orbit/lib/objects",
     __exports__.extend = extend;
     __exports__.extendClass = extendClass;
     __exports__.isArray = isArray;
+    __exports__.isObject = isObject;
     __exports__.isNone = isNone;
   });
 define("orbit/lib/strings", 
@@ -1983,6 +1994,7 @@ define("orbit/transform-connector",
     var ActionQueue = __dependency1__["default"];
     var Class = __dependency2__.Class;
     var clone = __dependency2__.clone;
+    var isNone = __dependency2__.isNone;
     var diffs = __dependency3__.diffs;
     var eq = __dependency4__.eq;
     var arrayToOptions = __dependency5__.arrayToOptions;
@@ -2003,10 +2015,6 @@ define("orbit/transform-connector",
      - In "non-blocking" mode, transforms do not block the resolution of the original
      transform - asynchronous actions are performed afterward.
 
-     If the target of a connector is busy processing transformations, then the
-     connector will queue operations until the target is free. This ensures that the
-     target's state is as up to date as possible before transformations proceed.
-
      The connector's `transform` method actually applies transforms to its target.
      This method attempts to retrieve the current value at the path of the
      transformation and resolves any conflicts with the connector's
@@ -2021,35 +2029,32 @@ define("orbit/transform-connector",
      @param {Object}  [options]
      @param {String}  [options.blocking=true] Does the connector wait for promises to be settled?
      @param {Boolean} [options.active=true] Is the connector is actively observing the `source`?
+     @param {Boolean} [options.rollbackTransformsOnFailure=false] Does the connector rollback transforms on the source when the target fails?
      @constructor
      */
     var TransformConnector = Class.extend({
       init: function(source, target, options) {
         this.source = source;
         this.target = target;
-        this.transformQueue = new ActionQueue(this.transform, this, {autoProcess: false});
 
         options = options || {};
         this.blocking = options.blocking !== undefined ? options.blocking : true;
+        this.rollbackTransformsOnFailure = options.rollbackTransformsOnFailure !== undefined ? options.rollbackTransformsOnFailure : false;
         var active = options.active !== undefined ? options.active : true;
 
         if (active) this.activate();
       },
 
       activate: function() {
-        var _this = this;
-
         if (this._active) return;
 
         this.source.on('didTransform',  this._processTransform,  this);
-        this.target.transformQueue.on('didComplete', this.transformQueue.process, this.transformQueue);
 
         this._active = true;
       },
 
       deactivate: function() {
         this.source.off('didTransform',  this._processTransform,  this);
-        this.target.transformQueue.off('didComplete', this.transformQueue.process, this.transformQueue);
 
         this._active = false;
       },
@@ -2064,16 +2069,17 @@ define("orbit/transform-connector",
         if (this.target.retrieve) {
           var currentValue = this.target.retrieve(operation.path);
 
-          if (currentValue !== null) {
-            if (operation.op === 'add' || operation.op === 'replace') {
-              if (eq(currentValue, operation.value)) {
-                // console.log('==', ' transform from ', this.source.id, ' to ', this.target.id, operation);
-                return;
-              } else {
-                return this.resolveConflicts(operation.path, currentValue, operation.value);
-              }
+          // console.log('currentValue', currentValue, ' transform from ', this.source.id, ' to ', this.target.id, operation);
+
+          if (!isNone(currentValue) && (operation.op === 'add' || operation.op === 'replace')) {
+            if (eq(currentValue, operation.value)) {
+              // console.log('==', ' transform from ', this.source.id, ' to ', this.target.id, operation);
+              return;
+            } else {
+              return this.resolveConflicts(operation.path, currentValue, operation.value);
             }
-          } else if (operation.op === 'remove') {
+
+          } else if (isNone(currentValue) && operation.op === 'remove') {
             return;
           }
         }
@@ -2100,7 +2106,7 @@ define("orbit/transform-connector",
       // Internals
       /////////////////////////////////////////////////////////////////////////////
 
-      _processTransform: function(operation) {
+      _processTransform: function(operation, inverseOps) {
         // console.log('****', ' processTransform from ', this.source.id, ' to ', this.target.id, operation);
 
         if (this.filterFunction) {
@@ -2108,24 +2114,24 @@ define("orbit/transform-connector",
         }
 
         if (this.blocking) {
-          return this._applyOrQueueTransform(operation);
+          return this._applyTransform(operation, inverseOps);
 
         } else {
-          this._applyOrQueueTransform(operation);
+          this._applyTransform(operation, inverseOps);
         }
       },
 
-      _applyOrQueueTransform: function(operation) {
-        // If the target's transformQueue is processing, then we should queue up the
-        // transform on the connector instead of on the target.
-        // This ensures that comparisons are made against the target's most up to
-        // date state. Note that this connector's queue processing is triggered
-        // by the `didComplete` event for the target's queue.
-        if (this.target.transformQueue.processing) {
-          return this.transformQueue.push(operation);
+      _applyTransform: function(operation, inverseOps) {
+        var transform = this.transform(operation);
+
+        if (this.rollbackTransformsOnFailure && transform && transform.then) {
+          var _this = this;
+          transform.then(null, function() {
+            return _this.source.transform(inverseOps);
+          });
         }
 
-        return this.transform(operation);
+        return transform;
       }
     });
 
@@ -2145,58 +2151,14 @@ define("orbit/transformable",
       if (typeof op.path === 'string') op.path = op.path.split('/');
     };
 
-    var settleTransformEvents = function(ops) {
-      var _this = this;
-
-      return new Orbit.Promise(function(resolve) {
-        var settleEach = function() {
-          if (ops.length === 0) {
-            resolve();
-
-          } else {
-            var op = ops.shift();
-
-    //TODO-log        console.log(_this.id, ops.length + 1, 'didTransform', op[0], op[1]);
-
-            var response = _this.settle.call(_this, 'didTransform', op[0], op[1]);
-
-            if (response) {
-              return response.then(
-                function(success) {
-                  settleEach();
-                },
-                function(error) {
-                  settleEach();
-                }
-              );
-            } else {
-              settleEach();
-            }
-          }
-        };
-
-        settleEach();
-      });
-    };
-
     var transformOne = function(operation) {
-      var _this = this;
-
       normalizeOperation(operation);
 
-      return _this.transformQueue.push(operation).then(
-        function(result) {
-          if (_this._completedTransforms.length > 0) {
-            return settleTransformEvents.call(_this, _this._completedTransforms).then(
-              function() {
-                return result;
-              }
-            );
-          } else {
-            return result;
-          }
-        }
-      );
+      if (this.settlingTransforms) {
+        return applyTransform.call(this, operation);
+      } else {
+        return this.transformQueue.push(operation);
+      }
     };
 
     var transformMany = function(operations) {
@@ -2205,32 +2167,48 @@ define("orbit/transformable",
           ret;
 
       operations.forEach(function(operation) {
-
-        normalizeOperation(operation);
-
-        ret = _this.transformQueue.push(operation).then(
+        ret = transformOne.call(_this, operation).then(
           function(inverse) {
-            if (_this._completedTransforms.length > 0) {
-              return settleTransformEvents.call(_this, _this._completedTransforms).then(
-                function() {
-                  inverses = inverses.concat(inverse);
-                }
-              );
-            } else {
-              inverses = inverses.concat(inverse);
-            }
+            inverses = inverses.concat(inverse);
           }
         );
       });
 
-      return ret.then( function() { return inverses; } );
+      // Allow `transform([])` to succeed
+      if (!ret) {
+        ret = new Orbit.Promise(function(resolve) { resolve(); });
+      }
+
+      return ret.then(function() {
+        return inverses;
+      });
+    };
+
+    var applyTransform = function(operation) {
+      // console.log('applyTransform', this.id, operation);
+
+      var res = this._transform(operation);
+
+      if (res) {
+        var _this = this;
+        return res.then(
+          function(inverse) {
+            return _this.settleTransforms().then(function () {
+              return inverse;
+            });
+          }
+        );
+
+      } else {
+        return this.settleTransforms();
+      }
     };
 
     var Transformable = {
       extend: function(object, actions) {
         if (object._transformable === undefined) {
           object._transformable = true;
-          object.transformQueue = new ActionQueue(object._transform, object);
+          object.transformQueue = new ActionQueue(applyTransform, object);
           object._completedTransforms = [];
 
           Evented.extend(object);
@@ -2240,7 +2218,35 @@ define("orbit/transformable",
           };
 
           object.settleTransforms = function() {
-            return settleTransformEvents.call(object, object._completedTransforms);
+            var _this = this;
+            var ops = this._completedTransforms;
+
+            // console.log('settleTransforms', this.id, ops);
+
+            _this.settlingTransforms = true;
+
+            return new Orbit.Promise(function(resolve) {
+              var settleEach = function() {
+                if (ops.length === 0) {
+                  _this.settlingTransforms = false;
+                  resolve();
+
+                } else {
+                  var op = ops.shift();
+
+                  // console.log('settleTransforms#settleEach', _this.id, ops.length + 1, 'didTransform', op[0], op[1]);
+
+                  var response = _this.settle.call(_this, 'didTransform', op[0], op[1]);
+                  if (response) {
+                    return response.then(settleEach, settleEach);
+                  } else {
+                    settleEach();
+                  }
+                }
+              };
+
+              settleEach();
+            });
           };
 
           object.transform = function(operation) {

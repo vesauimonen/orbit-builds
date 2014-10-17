@@ -5,6 +5,7 @@ define("orbit-common/jsonapi-source",
     var Orbit = __dependency1__["default"];
     var assert = __dependency2__.assert;
     var isArray = __dependency3__.isArray;
+    var isObject = __dependency3__.isObject;
     var Source = __dependency4__["default"];
     var Serializer = __dependency5__["default"];
     var JSONAPISerializer = __dependency6__["default"];
@@ -72,6 +73,8 @@ define("orbit-common/jsonapi-source",
               return _this._transformAddLink(operation);
             } else if (op === 'remove') {
               return _this._transformRemoveLink(operation);
+            } else if (op === 'replace') {
+              return _this._transformReplaceLink(operation);
             }
           } else {
             return _this._transformUpdateAttribute(operation);
@@ -216,7 +219,12 @@ define("orbit-common/jsonapi-source",
 
         return this.ajax(this.resourceURL(type, id), 'PUT', {data: json}).then(
           function(raw) {
-            _this.deserialize(type, id, raw);
+            // TODO - better 204 (no content) checking
+            if (raw && Object.keys(raw).length > 0) {
+              _this.deserialize(type, id, raw);
+            } else {
+              _this._transformCache(operation);
+            }
           }
         );
       },
@@ -300,7 +308,7 @@ define("orbit-common/jsonapi-source",
         var relResourceType = this.resourceType(relType);
         var relResourceId = this.resourceId(relType, relId);
 
-        var method = linkDef.type === 'hasMany' ? 'POST' : 'PUT';
+        var method = 'POST';
         var json = {};
         json[relResourceType] = relResourceId;
 
@@ -391,6 +399,74 @@ define("orbit-common/jsonapi-source",
             path: '/'
           };
         }
+
+        return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
+          function() {
+            _this._transformCache(operation);
+          }
+        );
+      },
+
+      _transformReplaceLink: function(operation) {
+        if (this.usePatch) {
+          return this._transformReplaceLinkWithPatch(operation);
+        } else {
+          return this._transformReplaceLinkStd(operation);
+        }
+      },
+
+      _transformReplaceLinkStd: function(operation) {
+        var _this = this;
+
+        var type = operation.path[0];
+        var id = operation.path[1];
+        var link = operation.path[3];
+        var relId = operation.path[4] || operation.value;
+
+        // Convert a map of ids to an array
+        if (isObject(relId)) {
+          relId = Object.keys(relId);
+        }
+
+        var linkDef = this.schema.models[type].links[link];
+        var relType = linkDef.model;
+        var relResourceType = this.resourceType(relType);
+        var relResourceId = this.resourceId(relType, relId);
+
+        var method = 'PUT';
+        var json = {};
+        json[relResourceType] = relResourceId;
+
+        return this.ajax(this.resourceLinkURL(type, id, link), method, {data: json}).then(
+          function() {
+            _this._transformCache(operation);
+          }
+        );
+      },
+
+      _transformReplaceLinkWithPatch: function(operation) {
+        var _this = this;
+
+        var type = operation.path[0];
+        var id = operation.path[1];
+        var link = operation.path[3];
+        var relId = operation.path[4] || operation.value;
+
+        // Convert a map of ids to an array
+        if (isObject(relId)) {
+          relId = Object.keys(relId);
+        }
+
+        var linkDef = this.schema.models[type].links[link];
+        var relType = linkDef.model;
+        var relResourceId = this.resourceId(relType, relId);
+        var remoteOp;
+
+        remoteOp = {
+          op: 'replace',
+          path: '/',
+          value: relResourceId
+        };
 
         return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
           function() {
@@ -705,6 +781,7 @@ define("orbit-common/jsonapi-serializer",
     var Serializer = __dependency1__["default"];
     var clone = __dependency2__.clone;
     var isArray = __dependency2__.isArray;
+    var isObject = __dependency2__.isObject;
 
     var JSONAPISerializer = Serializer.extend({
       resourceKey: function(type) {
@@ -720,10 +797,19 @@ define("orbit-common/jsonapi-serializer",
       },
 
       resourceId: function(type, id) {
+        if (isArray(id)) {
+          var ids = [];
+          for (var i = 0, l = id.length; i < l; i++) {
+            ids.push(this.resourceId(type, id[i]));
+          }
+
+          return ids;
+        }
+
         var primaryKey = this.schema.models[type].primaryKey.name;
         var resourceKey = this.resourceKey(type);
 
-        if (id !== null && typeof id === 'object') {
+        if (isObject(id)) {
           if (id[resourceKey]) {
             return id[resourceKey];
           }
