@@ -561,7 +561,7 @@ define("orbit-common/jsonapi-source",
           function(raw) {
             var records = _this.deserialize(type, null, raw);
             return _this.settleTransforms().then(function() {
-              return records;
+              return isArray(records) ? records : [records];
             });
           }
         );
@@ -1019,6 +1019,8 @@ define("orbit-common/jsonapi-serializer",
           Object.keys(record.links).forEach(function(link) {
             linkValue = record.links[link];
             linkSchema = schema.models[model].links[link];
+            
+            if (!linkSchema) return;
 
             if (linkSchema.type === 'hasMany' && isArray(linkValue)) {
               record.__rel[link] = record.__rel[link] || [];
