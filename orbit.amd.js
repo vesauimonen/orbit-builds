@@ -1810,31 +1810,22 @@ define("orbit/request-connector",
       },
 
       activate: function() {
-        var _this = this,
-            handler;
-
         if (this._active) return;
 
-        this.handlers = {};
+        if (!this.handlers) {
+          this.handlers = {};
+        }
 
         this.actions.forEach(function(action) {
-          if (_this.types) {
-            handler = function(type) {
-              if (_this.types[type]) {
-                return _this.secondarySource[action].apply(_this.secondarySource, arguments);
-              }
-            };
-          } else {
-            handler = _this.secondarySource[action];
-          }
+          var handler = this.handlers[action] || this._handlerFor(action);
 
-          _this.primarySource.on(_this.mode + capitalize(action),
+          this.primarySource.on(this.mode + capitalize(action),
             handler,
-            _this.secondarySource
+            this.secondarySource
           );
 
-          _this.handlers[action] = handler;
-        });
+          this.handlers[action] = handler;
+        }, this);
 
         this._active = true;
       },
@@ -1843,7 +1834,7 @@ define("orbit/request-connector",
         var _this = this;
 
         this.actions.forEach(function(action) {
-          this.primarySource.off(_this.mode + capitalize(action),
+          _this.primarySource.off(_this.mode + capitalize(action),
             _this.handlers[action],
             _this.secondarySource
           );
@@ -1854,6 +1845,25 @@ define("orbit/request-connector",
 
       isActive: function() {
         return this._active;
+      },
+
+      /**
+       * Should return the handler for a Requestable action.
+       *
+       * @param {String} action - I.E. 'find', 'findLink'
+       * @returns {Function} handler to call for that action
+       */
+      _handlerFor: function(action) {
+        if (!this.types) {
+          return this.secondarySource[action];
+        }
+
+        var _this = this;
+        return function filterRequestByType(type) {
+          if (_this.types[type]) {
+            return _this.secondarySource[action].apply(_this.secondarySource, arguments);
+          }
+        };
       }
     });
 

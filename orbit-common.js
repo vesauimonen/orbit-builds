@@ -57,6 +57,7 @@ define("orbit-common/cache",
      @param {Boolean} [options.trackChanges=true] Should the `didTransform` event be triggered after calls to `transform`?
      @param {Boolean} [options.trackRevLinks=true] Should `__rev` be maintained for each record, indicating which other records reference them?
      @param {Boolean} [options.trackRevLinkChanges=false] Should the `didTransform` event be triggered after `__rev` is updated?
+     @param {Boolean} [options.allowNoOps=true] Allow operations that can't be performed but don't need to be ("no-ops"), such as removing a non-existent path?
      @constructor
      */
     var Cache = Class.extend({
@@ -65,6 +66,7 @@ define("orbit-common/cache",
         this.trackChanges = options.trackChanges !== undefined ? options.trackChanges : true;
         this.trackRevLinks = options.trackRevLinks !== undefined ? options.trackRevLinks : true;
         this.trackRevLinkChanges = options.trackRevLinkChanges !== undefined ? options.trackRevLinkChanges : false;
+        this.allowNoOps = options.allowNoOps !== undefined ? options.allowNoOps : true;
 
         this._doc = new Document(null, {arrayBasedPaths: true});
 
@@ -129,6 +131,22 @@ define("orbit-common/cache",
       },
 
       /**
+       Returns whether a path exists in the document.
+
+       @method exists
+       @param path
+       @returns {Boolean}
+       */
+      exists: function(path) {
+        try {
+          this._doc.retrieve(path);
+          return true;
+        } catch(e) {
+          return false;
+        }
+      },
+
+      /**
        Transforms the document with an RFC 6902-compliant operation.
 
        Currently limited to `add`, `remove` and `replace` operations.
@@ -168,6 +186,15 @@ define("orbit-common/cache",
 
       _transform: function(operation, track) {
     //    console.log('_transform', operation, track);
+
+        if (this.allowNoOps) {
+          if (operation.op === 'remove' && !this.exists(operation.path)) {
+            return;
+          } else if (operation.op === 'replace' && !this.exists(operation.path)) {
+            operation.op = 'add';
+          }
+        }
+
         if (track) {
           var inverse = this._doc.transform(operation, true);
           this.emit('didTransform', operation, inverse);

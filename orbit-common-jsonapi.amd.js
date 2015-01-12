@@ -109,7 +109,7 @@ define("orbit-common/jsonapi-source",
           return this._findMany(type, id);
 
         } else {
-          var resourceKey = this.resourceKey(type);
+          var resourceKey = this.serializer.resourceKey(type);
 
           if (id && typeof id === 'object' && id[resourceKey]) {
             return this._findOne(type, id);
@@ -125,7 +125,7 @@ define("orbit-common/jsonapi-source",
         return this.ajax(this.resourceLinkURL(type, id, link), 'GET').then(
           function(raw) {
             var linkDef = _this.schema.models[type].links[link];
-            var relId = _this.deserializeLink(linkDef.model, raw);
+            var relId = _this.serializer.deserializeLink(linkDef.model, raw);
 
             return _this.settleTransforms().then(function() {
               return relId;
@@ -170,7 +170,7 @@ define("orbit-common/jsonapi-source",
         var _this = this;
         var type = operation.path[0];
         var id = operation.path[1];
-        var json = this.serialize(type, operation.value);
+        var json = this.serializer.serialize(type, operation.value);
 
         return this.ajax(this.resourceURL(type), 'POST', {data: json}).then(
           function(raw) {
@@ -215,7 +215,7 @@ define("orbit-common/jsonapi-source",
         var id = operation.path[1];
         var value = operation.value;
 
-        var json = this.serialize(type, value);
+        var json = this.serializer.serialize(type, value);
 
         return this.ajax(this.resourceURL(type, id), 'PUT', {data: json}).then(
           function(raw) {
@@ -305,8 +305,8 @@ define("orbit-common/jsonapi-source",
 
         var linkDef = this.schema.models[type].links[link];
         var relType = linkDef.model;
-        var relResourceType = this.resourceType(relType);
-        var relResourceId = this.resourceId(relType, relId);
+        var relResourceType = this.serializer.resourceType(relType);
+        var relResourceId = this.serializer.resourceId(relType, relId);
 
         var method = 'POST';
         var json = {};
@@ -328,7 +328,7 @@ define("orbit-common/jsonapi-source",
         var relId = operation.path[4] || operation.value;
         var linkDef = this.schema.models[type].links[link];
         var relType = linkDef.model;
-        var relResourceId = this.resourceId(relType, relId);
+        var relResourceId = this.serializer.resourceId(relType, relId);
         var remoteOp;
 
         if (linkDef.type === 'hasMany') {
@@ -387,7 +387,7 @@ define("orbit-common/jsonapi-source",
         if (linkDef.type === 'hasMany') {
           var relId = operation.path[4];
           var relType = linkDef.model;
-          var relResourceId = this.resourceId(relType, relId);
+          var relResourceId = this.serializer.resourceId(relType, relId);
 
           remoteOp = {
             op: 'remove',
@@ -430,8 +430,8 @@ define("orbit-common/jsonapi-source",
 
         var linkDef = this.schema.models[type].links[link];
         var relType = linkDef.model;
-        var relResourceType = this.resourceType(relType);
-        var relResourceId = this.resourceId(relType, relId);
+        var relResourceType = this.serializer.resourceType(relType);
+        var relResourceId = this.serializer.resourceId(relType, relId);
 
         var method = 'PUT';
         var json = {};
@@ -459,7 +459,7 @@ define("orbit-common/jsonapi-source",
 
         var linkDef = this.schema.models[type].links[link];
         var relType = linkDef.model;
-        var relResourceId = this.resourceId(relType, relId);
+        var relResourceId = this.serializer.resourceId(relType, relId);
         var remoteOp;
 
         remoteOp = {
@@ -496,7 +496,7 @@ define("orbit-common/jsonapi-source",
         this.serializer.serializeAttribute(type, record, attr, serialized);
 
         var json = {};
-        var resourceType = this.resourceType(type);
+        var resourceType = this.serializer.resourceType(type);
         json[resourceType] = serialized;
 
         return this.ajax(this.resourceURL(type, id), 'PUT', {data: json}).then(
@@ -607,6 +607,14 @@ define("orbit-common/jsonapi-source",
         }
       },
 
+      _resourceIdURLSegment: function(type, id) {
+        var resourceId = this.serializer.resourceId(type, id);
+        if (isArray(resourceId)) {
+          resourceId = resourceId.join(',');
+        }
+        return resourceId;
+      },
+
       /////////////////////////////////////////////////////////////////////////////
       // Publicly accessible methods particular to JSONAPISource
       /////////////////////////////////////////////////////////////////////////////
@@ -677,19 +685,22 @@ define("orbit-common/jsonapi-source",
         return this.host;
       },
 
+      resourcePath: function(type, id) {
+        var path = [this.serializer.resourceType(type)];
+        if (id) {
+          path.push(this._resourceIdURLSegment(type, id));
+        }
+        return path.join('/');
+      },
+
       resourceURL: function(type, id) {
-        var resourceType = this.resourceType(type),
-            host = this.resourceHost(type),
+        var host = this.resourceHost(type),
             namespace = this.resourceNamespace(type),
             url = [];
 
         if (host) { url.push(host); }
         if (namespace) { url.push(namespace); }
-        url.push(this.resourcePath(type));
-
-        if (id) {
-          url.push(this.resourceIdURLSegment(type, id));
-        }
+        url.push(this.resourcePath(type, id));
 
         url = url.join('/');
         if (!host) { url = '/' + url; }
@@ -699,50 +710,15 @@ define("orbit-common/jsonapi-source",
 
       resourceLinkURL: function(type, id, link, relId) {
         var url = this.resourceURL(type, id);
-        url += '/links/' + link;
+        url += '/links/' + this.serializer.resourceLink(type, link);
 
         if (relId) {
           var linkDef = this.schema.models[type].links[link];
 
-          url += '/' + this.resourceIdURLSegment(linkDef.model, relId);
+          url += '/' + this._resourceIdURLSegment(linkDef.model, relId);
         }
 
         return url;
-      },
-
-      resourceIdURLSegment: function(type, id) {
-        if (isArray(id)) {
-          var resourceIds = [];
-          id.forEach(function(i) {
-            resourceIds.push(this.resourceId(type, i));
-          }, this);
-          return resourceIds.join(',');
-
-        } else {
-          return this.resourceId(type, id);
-        }
-      },
-
-      // TODO - linkedResourceURL
-
-      resourcePath: function(type) {
-        return this.schema.pluralize(type);
-      },
-
-      resourceId: function(type, id) {
-        return this.serializer.resourceId(type, id);
-      },
-
-      resourceKey: function(type) {
-        return this.serializer.resourceKey(type);
-      },
-
-      resourceType: function(type) {
-        return this.serializer.resourceType(type);
-      },
-
-      serialize: function(type, records) {
-        return this.serializer.serialize(type, records);
       },
 
       deserialize: function(type, id, data) {
@@ -765,10 +741,6 @@ define("orbit-common/jsonapi-source",
         }
 
         return primaryRecords;
-      },
-
-      deserializeLink: function(type, data) {
-        return this.serializer.deserializeLink(type, data);
       }
     });
 
@@ -790,6 +762,14 @@ define("orbit-common/jsonapi-serializer",
 
       resourceType: function(type) {
         return this.schema.pluralize(type);
+      },
+
+      resourceLink: function(type, link) {
+        return link;
+      },
+
+      resourceAttr: function(type, attr) {
+        return attr;
       },
 
       typeFromResourceType: function(resourceType) {
@@ -898,7 +878,7 @@ define("orbit-common/jsonapi-serializer",
       },
 
       serializeAttribute: function(type, record, attr, json) {
-        json[attr] = record[attr];
+        json[this.resourceAttr(type, attr)] = record[attr];
       },
 
       serializeLinks: function(type, record, json) {
@@ -913,11 +893,10 @@ define("orbit-common/jsonapi-serializer",
             var value = record.__rel[link];
 
             if (linkDef.type === 'hasMany') {
-              json.links[link] = Object.keys(value);
-
-            } else {
-              json.links[link] = value;
+              value = Object.keys(value);
             }
+
+            json.links[link] = value;
 
           }, this);
         }
@@ -1016,7 +995,7 @@ define("orbit-common/jsonapi-serializer",
           Object.keys(record.links).forEach(function(link) {
             linkValue = record.links[link];
             linkSchema = schema.models[model].links[link];
-            
+
             if (!linkSchema) return;
 
             if (linkSchema.type === 'hasMany' && isArray(linkValue)) {
