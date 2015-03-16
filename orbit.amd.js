@@ -1677,6 +1677,8 @@ define('orbit/operation', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid'], fu
     log: null,
 
     init: function(options) {
+      options = options || {};
+
       var path = options.path;
       if (typeof path === 'string') path = path.split('/');
 
@@ -1686,17 +1688,27 @@ define('orbit/operation', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid'], fu
         this.value = options.value;
       }
 
-      this.id = uuid.uuid();
+      this.id = options.id || uuid.uuid();
 
       if (options.parent) {
         this.log = options.parent.log.concat(options.parent.id);
       } else {
-        this.log = [];
+        this.log = options.log || [];
       }
     },
 
-    spawnedFrom: function(operation) {
+    descendedFrom: function(operation) {
       return this.log.indexOf(operation.id || operation) > -1;
+    },
+
+    relatedTo: function(operation) {
+      if (operation instanceof Operation) {
+        return (operation.descendedFrom(this.log[0] || this.id) ||
+                this.descendedFrom(operation.log[0] || operation.id) ||
+                this.id === operation.id);
+      } else {
+        return this.descendedFrom(operation) || this.id === operation;
+      }
     },
 
     spawn: function(data) {
@@ -2017,15 +2029,17 @@ define('orbit/transform-connector', ['exports', 'orbit/lib/objects', 'orbit/lib/
     },
 
     resolveConflicts: function(path, currentValue, updatedValue, operation) {
-      var ops = diffs.diffs(currentValue, updatedValue, {basePath: path});
+      var ops = diffs.diffs(currentValue, updatedValue, {basePath: path, ignore: ['__rev']});
 
-      var spawnedOps = ops.map(function(op) {
-        return operation.spawn(op);
-      });
+      if (ops) {
+        var spawnedOps = ops.map(function(op) {
+          return operation.spawn(op);
+        });
 
-      // console.log(this.target.id, 'resolveConflicts', path, currentValue, updatedValue, spawnedOps);
+        // console.log(this.target.id, 'resolveConflicts', path, currentValue, updatedValue, spawnedOps);
 
-      return this.target.transform(spawnedOps);
+        return this.target.transform(spawnedOps);
+      }
     },
 
     /**
@@ -2047,15 +2061,11 @@ define('orbit/transform-connector', ['exports', 'orbit/lib/objects', 'orbit/lib/
       }
 
       if (this.blocking) {
-        return this._applyTransform(operation, inverseOps);
+        return this.transform(operation);
 
       } else {
-        this._applyTransform(operation, inverseOps);
+        this.transform(operation);
       }
-    },
-
-    _applyTransform: function(operation, inverseOps) {
-      return this.transform(operation);
     }
   });
 
@@ -2195,7 +2205,7 @@ define('orbit/transformation', ['exports', 'orbit/main', 'orbit/lib/objects', 'o
 
     queue: null,
 
-    originalOperationIds: null,
+    originalOperations: null,
 
     completedOperations: null,
 
@@ -2211,15 +2221,15 @@ define('orbit/transformation', ['exports', 'orbit/main', 'orbit/lib/objects', 'o
       this.target = target;
       this.queue = new ActionQueue['default']({autoProcess: false});
       this.completedOperations = [];
-      this.originalOperationIds = [];
+      this.originalOperations = [];
       this.inverseOperations = [];
     },
 
     verifyOperation: function(operation) {
-      var id;
-      for (var i = 0; i < this.originalOperationIds.length; i++) {
-        id = this.originalOperationIds[i];
-        if (operation.id === id || operation.spawnedFrom(id)) {
+      var original;
+      for (var i = 0; i < this.originalOperations.length; i++) {
+        original = this.originalOperations[i];
+        if (operation.relatedTo(original)) {
           // console.log('Transformation#verifyOperation - TRUE', this.target.id, operation);
           return true;
         }
@@ -2232,9 +2242,9 @@ define('orbit/transformation', ['exports', 'orbit/main', 'orbit/lib/objects', 'o
       var _this = this;
 
       if (objects.isArray(operation)) {
-        if (_this.originalOperationIds.length === 0) {
+        if (_this.originalOperations.length === 0) {
           operation.forEach(function(o) {
-            _this.originalOperationIds.push(o.id);
+            _this.originalOperations.push(o);
           });
         }
 
@@ -2247,11 +2257,11 @@ define('orbit/transformation', ['exports', 'orbit/main', 'orbit/lib/objects', 'o
 
         // console.log('Transformation#push - queued', _this.target.id, operation);
 
-        if (_this.originalOperationIds.length === 0) {
-          _this.originalOperationIds.push(operation.id);
+        if (_this.originalOperations.length === 0) {
+          _this.originalOperations.push(operation);
         }
 
-        if (_this.currentOperation && operation.spawnedFrom(_this.currentOperation)) {
+        if (_this.currentOperation && operation.relatedTo(_this.currentOperation)) {
           // console.log('!!! Transformation spawned from current op');
 
           return _this._transform(operation);
@@ -2274,8 +2284,8 @@ define('orbit/transformation', ['exports', 'orbit/main', 'orbit/lib/objects', 'o
     pushCompletedOperation: function(operation, inverse) {
       assert.assert('completed operation must be an `Operation`', operation instanceof Operation['default']);
 
-      if (this.originalOperationIds.length === 0) {
-        this.originalOperationIds.push(operation.id);
+      if (this.originalOperations.length === 0) {
+        this.originalOperations.push(operation);
       }
 
       this.inverseOperations = this.inverseOperations.concat(inverse);

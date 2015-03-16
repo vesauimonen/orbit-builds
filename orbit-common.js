@@ -3,8 +3,6 @@
 // Share loader properties from globalized Orbit package
 var define = window.Orbit.__define__;
 var requireModule = window.Orbit.__requireModule__;
-var require = window.Orbit.__require__;
-var requirejs = window.Orbit.__requirejs__;
 
 define('orbit-common', ['exports', 'orbit-common/main', 'orbit-common/cache', 'orbit-common/schema', 'orbit-common/serializer', 'orbit-common/source', 'orbit-common/memory-source', 'orbit-common/lib/exceptions'], function (exports, OC, Cache, Schema, Serializer, Source, MemorySource, exceptions) {
 
@@ -780,12 +778,19 @@ define('orbit-common/memory-source', ['exports', 'orbit/main', 'orbit/lib/assert
 
     _transformAddLink: function(type, id, key, value, parentOperation) {
       if (this._cache.retrieve([type, id])) {
-        this._cache.transform(parentOperation.spawn(this._addLinkOp(type, id, key, value)));
+        var op = this._addLinkOp(type, id, key, value);
+
+        // Apply operation only if necessary
+        if (!this._cache.retrieve(op.path)) {
+          this._cache.transform(parentOperation.spawn(op));
+        }
       }
     },
 
     _transformRemoveLink: function(type, id, key, value, parentOperation) {
       var op = this._removeLinkOp(type, id, key, value);
+
+      // Apply operation only if necessary
       if (this._cache.retrieve(op.path)) {
         this._cache.transform(parentOperation.spawn(op));
       }
@@ -793,7 +798,12 @@ define('orbit-common/memory-source', ['exports', 'orbit/main', 'orbit/lib/assert
 
     _transformUpdateLink: function(type, id, key, value, parentOperation) {
       if (this._cache.retrieve([type, id])) {
-        this._cache.transform(parentOperation.spawn(this._updateLinkOp(type, id, key, value)));
+        var op = this._updateLinkOp(type, id, key, value);
+
+        // Apply operation only if necessary
+        if (!this._cache.retrieve(op.path)) {
+          this._cache.transform(parentOperation.spawn(op));
+        }
       }
     },
 
@@ -888,6 +898,14 @@ define('orbit-common/schema', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid',
       }
     },
 
+    /**
+     Registers a model's schema definition.
+
+     Emits the `modelRegistered` event upon completion.
+
+     @param {String} model      name of the model
+     @param {Object} definition model schema definition
+     */
     registerModel: function(model, definition) {
       var modelSchema = this._mergeModelSchemas({}, this.modelDefaults, definition);
 
@@ -929,10 +947,23 @@ define('orbit-common/schema', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid',
       this.emit('modelRegistered', model);
     },
 
+    /**
+     Normalizes a record according to its type and corresponding schema
+     definition.
+
+     A record's primary key, links, and meta data will all be initialized.
+
+     A record can only be normalized once. A flag is set on the record
+     (`__normalized`) to prevent "re-normalization".
+
+     @param  {String} model   record type
+     @param  {Object} data    record data
+     @return {Object} normalized version of `data`
+     */
     normalize: function(model, data) {
       if (data.__normalized) return data;
 
-      var record = data; // TODO? clone(data);
+      var record = data;
 
       // set flag
       record.__normalized = true;
@@ -1024,7 +1055,13 @@ define('orbit-common/schema', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid',
       return value;
     },
 
-    // TODO - test
+    /**
+     Given a data object structured according to this schema, register all of its
+     primary and secondary key mappings. This data object may contain any number
+     of records and types.
+
+     @param {Object} data - data structured according to this schema
+     */
     registerAllKeys: function(data) {
       if (data) {
         Object.keys(data).forEach(function(type) {
@@ -1033,9 +1070,9 @@ define('orbit-common/schema', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid',
           if (modelSchema && modelSchema.secondaryKeys) {
             var records = data[type];
 
-            records.forEach(function(record) {
-              var id = record[modelSchema.primaryKey.name],
-                  altId;
+            Object.keys(records).forEach(function(id) {
+              var record = records[id];
+              var altId;
 
               Object.keys(modelSchema.secondaryKeys).forEach(function(secondaryKey) {
                 altId = record[secondaryKey];
@@ -1050,10 +1087,28 @@ define('orbit-common/schema', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid',
       }
     },
 
+    /**
+     A naive pluralization method.
+
+     Override with a more robust general purpose inflector or provide an
+     inflector tailored to the vocabularly of your application.
+
+     @param  {String} word
+     @return {String} plural form of `word`
+     */
     pluralize: function(word) {
       return word + 's';
     },
 
+    /**
+     A naive singularization method.
+
+     Override with a more robust general purpose inflector or provide an
+     inflector tailored to the vocabularly of your application.
+
+     @param  {String} word
+     @return {String} singular form of `word`
+     */
     singularize: function(word) {
       if (word.lastIndexOf('s') === word.length - 1) {
         return word.substr(0, word.length - 1);
@@ -1169,7 +1224,7 @@ define('orbit-common/serializer', ['exports', 'orbit/lib/objects', 'orbit/lib/st
   exports['default'] = Serializer;
 
 });
-define('orbit-common/source', ['exports', 'orbit/main', 'orbit/document', 'orbit/transformable', 'orbit/requestable', 'orbit/lib/assert', 'orbit/lib/stubs', 'orbit/lib/objects', 'orbit-common/cache'], function (exports, Orbit, Document, Transformable, Requestable, assert, stubs, objects, Cache) {
+define('orbit-common/source', ['exports', 'orbit/main', 'orbit/document', 'orbit/transformable', 'orbit/requestable', 'orbit/lib/assert', 'orbit/lib/stubs', 'orbit/lib/objects', 'orbit-common/cache', 'orbit/operation'], function (exports, Orbit, Document, Transformable, Requestable, assert, stubs, objects, Cache, Operation) {
 
   'use strict';
 
@@ -1398,11 +1453,11 @@ define('orbit-common/source', ['exports', 'orbit/main', 'orbit/document', 'orbit
         value = true;
       }
 
-      return {
+      return new Operation['default']({
         op: 'add',
         path: path,
         value: value
-      };
+      });
     },
 
     _removeLinkOp: function(type, id, key, value) {
@@ -1413,10 +1468,10 @@ define('orbit-common/source', ['exports', 'orbit/main', 'orbit/document', 'orbit
         path.push(value);
       }
 
-      return {
+      return new Operation['default']({
         op: 'remove',
         path: path
-      };
+      });
     },
 
     _updateLinkOp: function(type, id, key, value) {
@@ -1432,11 +1487,11 @@ define('orbit-common/source', ['exports', 'orbit/main', 'orbit/document', 'orbit
         value = obj;
       }
 
-      return {
+      return new Operation['default']({
         op: 'replace',
         path: path,
         value: value
-      };
+      });
     }
   });
 

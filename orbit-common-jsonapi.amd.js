@@ -272,7 +272,7 @@ define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer',
   exports['default'] = JSONAPISerializer;
 
 });
-define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/assert', 'orbit/lib/objects', 'orbit-common/source', 'orbit-common/serializer', 'orbit-common/jsonapi-serializer', 'orbit-common/lib/exceptions'], function (exports, Orbit, assert, objects, Source, Serializer, JSONAPISerializer, exceptions) {
+define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/assert', 'orbit/lib/objects', 'orbit/operation', 'orbit-common/source', 'orbit-common/serializer', 'orbit-common/jsonapi-serializer', 'orbit-common/lib/exceptions'], function (exports, Orbit, assert, objects, Operation, Source, Serializer, JSONAPISerializer, exceptions) {
 
   'use strict';
 
@@ -981,6 +981,16 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
     deserialize: function(type, id, data, parentOperation) {
       var deserialized = this.serializer.deserialize(type, id, data);
       var primaryRecords = deserialized[type];
+
+      // Create a new parent operation, if necessary, to ensure that subsequent
+      // operations are related and will be settled together in the same
+      // transformation.
+      //
+      // Note: this parent operation is not actually performed on this source.
+      // It is only created to establish a common ancestor.
+      if (!parentOperation) {
+        parentOperation = new Operation['default']();
+      }
 
       if (this._cache) {
         if (objects.isArray(primaryRecords)) {
