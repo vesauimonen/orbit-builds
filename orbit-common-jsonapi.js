@@ -1020,8 +1020,8 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
   exports['default'] = JSONAPISource;
 
 });
-window.OC.JSONAPISource = requireModule("orbit-common/jsonapi-source");
-window.OC.JSONAPISerializer = requireModule("orbit-common/jsonapi-serializer");
+window.OC.JSONAPISource = requireModule("orbit-common/jsonapi-source")["default"];
+window.OC.JSONAPISerializer = requireModule("orbit-common/jsonapi-serializer")["default"];
 
 })();
 //# sourceMappingURL=orbit-common-jsonapi.map

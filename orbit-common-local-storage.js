@@ -83,7 +83,7 @@ define('orbit-common/local-storage-source', ['exports', 'orbit/lib/assert', 'orb
   exports['default'] = LocalStorageSource;
 
 });
-window.OC.LocalStorageSource = requireModule("orbit-common/local-storage-source");
+window.OC.LocalStorageSource = requireModule("orbit-common/local-storage-source")["default"];
 
 })();
 //# sourceMappingURL=orbit-common-local-storage.map

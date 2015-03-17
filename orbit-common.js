@@ -1509,7 +1509,7 @@ define('orbit-common/source', ['exports', 'orbit/main', 'orbit/document', 'orbit
   exports['default'] = Source;
 
 });
-window.OC = requireModule("orbit-common");
+window.OC = requireModule("orbit-common")["default"];
 
 })();
 //# sourceMappingURL=orbit-common.map

@@ -2485,7 +2485,7 @@ define('orbit/transformation', ['exports', 'orbit/main', 'orbit/lib/objects', 'o
   });
 
 });
-var Orbit = requireModule("orbit");
+var Orbit = requireModule("orbit")["default"];
 
 // Globalize loader properties for use by other Orbit packages
 Orbit.__define__ = define;
