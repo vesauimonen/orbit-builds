@@ -1550,6 +1550,29 @@ define('orbit/lib/objects', ['exports', 'orbit/lib/eq'], function (exports, eq) 
     return obj === undefined || obj === null;
   };
 
+  /**
+   Combines two objects values
+
+   @method merge
+   @for Orbit
+   @param {Object} base
+   @param {Object} source
+   @returns {Object}
+   */
+  var merge =  function(base, source) {
+    var merged = clone(base);
+    if (source) {
+      Object.keys(source).forEach(function(field) {
+        if (source.hasOwnProperty(field)) {
+          var fieldDef = source[field];
+          merged[field] = fieldDef;
+        }
+      });
+    }
+
+    return merged;
+  };
+
   exports.Class = Class;
   exports.clone = clone;
   exports.defineClass = defineClass;
@@ -1559,6 +1582,7 @@ define('orbit/lib/objects', ['exports', 'orbit/lib/eq'], function (exports, eq) 
   exports.isArray = isArray;
   exports.isObject = isObject;
   exports.isNone = isNone;
+  exports.merge = merge;
 
 });
 define('orbit/lib/strings', ['exports'], function (exports) {
