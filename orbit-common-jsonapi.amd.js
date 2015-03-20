@@ -251,7 +251,7 @@ define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer',
             var rels = record.__rel[link];
             linkValue.forEach(function(resourceId) {
               id = this.idFromResourceId(linkSchema.model, resourceId);
-              record.__rel[link][id] = id;
+              record.__rel[link][id] = true;
             }, this);
 
           } else if (linkSchema.type === 'hasOne' && (typeof linkValue === 'string' || typeof linkValue === 'number')) {
@@ -844,7 +844,7 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
         pathToVerify = operation.path;
       }
 
-      if (this.retrieve(pathToVerify)) {
+      if (this.retrieve(pathToVerify) !== null) {
         // transforming the cache will trigger a call to `_cacheDidTransform`,
         // which will then trigger `didTransform`
         this._cache.transform(operation);
