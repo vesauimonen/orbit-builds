@@ -47,7 +47,7 @@ define('orbit-common/local-storage-source', ['exports', 'orbit/lib/assert', 'orb
 
     load: function() {
       for (var key in window.localStorage) {
-        if (key.startsWith(this.namespace)) {
+        if (key.indexOf(this.namespace) === 0) {
           var path = key.split(this.delimeter);
           var item = JSON.parse(window.localStorage.getItem(key));
           this._cache._doc._data[path[1]][path[2]] = item;
