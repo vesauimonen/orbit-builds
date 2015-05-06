@@ -320,6 +320,8 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       var op    = operation.op;
       var path  = operation.path;
 
+      // console.log('jsonapi#_transform', op, path, operation.value);
+
       if (path.length > 2) {
         if (path[2] === '__rel') {
           if (op === 'add') {
@@ -844,7 +846,7 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
         pathToVerify = operation.path;
       }
 
-      if (this.retrieve(pathToVerify) !== null) {
+      if (this.retrieve(pathToVerify) !== undefined) {
         // transforming the cache will trigger a call to `_cacheDidTransform`,
         // which will then trigger `didTransform`
         this._cache.transform(operation);
@@ -886,7 +888,7 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
         hash.dataType = 'json';
         hash.context = _this;
 
-        // console.log('ajax start', method);
+        // console.log('ajax start', method, url);
 
         if (hash.data && method !== 'GET') {
           // If contentType has not been specified, use the appropriate type

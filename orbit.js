@@ -111,7 +111,7 @@ var define, requireModule, require, requirejs;
   };
 })();
 
-define('orbit', ['exports', 'orbit/main', 'orbit/action', 'orbit/action-queue', 'orbit/document', 'orbit/evented', 'orbit/notifier', 'orbit/operation', 'orbit/requestable', 'orbit/request-connector', 'orbit/transaction', 'orbit/transformable', 'orbit/transformation', 'orbit/transform-connector', 'orbit/lib/assert', 'orbit/lib/config', 'orbit/lib/diffs', 'orbit/lib/eq', 'orbit/lib/exceptions', 'orbit/lib/objects', 'orbit/lib/strings', 'orbit/lib/stubs', 'orbit/lib/uuid'], function (exports, Orbit, Action, ActionQueue, Document, Evented, Notifier, Operation, Requestable, RequestConnector, Transaction, Transformable, Transformation, TransformConnector, assert, config, diffs, eq, exceptions, objects, strings, stubs, uuid) {
+define('orbit', ['exports', 'orbit/main', 'orbit/action', 'orbit/action-queue', 'orbit/document', 'orbit/evented', 'orbit/notifier', 'orbit/operation', 'orbit/requestable', 'orbit/request-connector', 'orbit/transaction', 'orbit/transformable', 'orbit/transformation', 'orbit/transform-connector', 'orbit/lib/assert', 'orbit/lib/config', 'orbit/lib/deprecate', 'orbit/lib/diffs', 'orbit/lib/eq', 'orbit/lib/exceptions', 'orbit/lib/functions', 'orbit/lib/objects', 'orbit/lib/strings', 'orbit/lib/stubs', 'orbit/lib/uuid'], function (exports, Orbit, Action, ActionQueue, Document, Evented, Notifier, Operation, Requestable, RequestConnector, Transaction, Transformable, Transformation, TransformConnector, assert, config, deprecate, diffs, eq, exceptions, functions, objects, strings, stubs, uuid) {
 
 	'use strict';
 
@@ -130,10 +130,12 @@ define('orbit', ['exports', 'orbit/main', 'orbit/action', 'orbit/action-queue', 
 	// lib fns
 	Orbit['default'].assert = assert.assert;
 	Orbit['default'].arrayToOptions = config.arrayToOptions;
+	Orbit['default'].deprecate = deprecate.deprecate;
 	Orbit['default'].diffs = diffs.diffs;
 	Orbit['default'].eq = eq.eq;
 	Orbit['default'].Exception = exceptions.Exception;
 	Orbit['default'].PathNotFoundException = exceptions.PathNotFoundException;
+	Orbit['default'].spread = functions.spread;
 	Orbit['default'].Class = objects.Class;
 	Orbit['default'].clone = objects.clone;
 	Orbit['default'].defineClass = objects.defineClass;
@@ -1072,6 +1074,30 @@ define('orbit/lib/config', ['exports'], function (exports) {
   exports.arrayToOptions = arrayToOptions;
 
 });
+define('orbit/lib/deprecate', ['exports'], function (exports) {
+
+  'use strict';
+
+  /**
+   Display a deprecation warning with the provided message.
+
+   @method deprecate
+   @for Orbit
+   @param {String} message Description of the deprecation
+   @param {Boolean} test An optional boolean. If false, the deprecation will be displayed.
+   */
+  var deprecate = function(message, test) {
+    if (typeof test === 'function') {
+      if (test()) return;
+    } else {
+      if (test) return;
+    }
+    console.warn(message);
+  };
+
+  exports.deprecate = deprecate;
+
+});
 define('orbit/lib/diffs', ['exports', 'orbit/lib/eq', 'orbit/lib/objects', 'orbit/lib/config'], function (exports, eq, objects, config) {
 
   'use strict';
@@ -1279,6 +1305,27 @@ define('orbit/lib/exceptions', ['exports', 'orbit/lib/objects'], function (expor
 
   exports.Exception = Exception;
   exports.PathNotFoundException = PathNotFoundException;
+
+});
+define('orbit/lib/functions', ['exports'], function (exports) {
+
+  'use strict';
+
+  /**
+   Wraps a function that expects parameters with another that can accept the parameters as an array
+
+   @method spread
+   @for Orbit
+   @param {Object} func
+   @returns {function}
+   */
+  var spread = function(func) {
+    return function(args) {
+      func.apply(null, args);
+    };
+  };
+
+  exports.spread = spread;
 
 });
 define('orbit/lib/objects', ['exports', 'orbit/lib/eq'], function (exports, eq) {
@@ -2005,12 +2052,23 @@ define('orbit/operation', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid'], fu
       options = options || {};
 
       var path = options.path;
-      if (typeof path === 'string') path = path.split('/');
+      if (typeof path === 'string') {
+        if (path.indexOf('/') === 0) {
+          path = path.substr(1);
+        }
+        if (path.length === 0) {
+          path = [];
+        } else {
+          path = path.split('/');
+        }
+      }
 
       this.op = options.op;
       this.path = path;
       if (includeValue(this)) {
         this.value = options.value;
+      } else {
+        this.value = undefined;
       }
 
       this.id = options.id || uuid.uuid();
