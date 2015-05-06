@@ -31,11 +31,14 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
 
       this.trackChanges = options.trackChanges !== undefined ? options.trackChanges : true;
       this.maintainRevLinks = options.maintainRevLinks !== undefined ? options.maintainRevLinks : true;
-      this.trackRevLinkChanges = options.trackRevLinkChanges !== undefined ? options.trackRevLinkChanges : false;
       this.maintainInverseLinks = options.maintainInverseLinks !== undefined ? options.maintainRevLinks : true;
       this.maintainDependencies = options.maintainDependencies !== undefined ? options.maintainDependencies : true;
 
       this._doc = new Document['default'](null, {arrayBasedPaths: true});
+
+      if (this.maintainRevLinks) {
+        this._rev = {};
+      }
 
       this._pathsToRemove = [];
 
@@ -162,6 +165,26 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
       var value = normalizedOperation.value;
       var currentValue = this.retrieve(path);
       var _this = this;
+      var dependentOperations = [];
+      var pushOps = function(ops) {
+        if (ops) {
+          if (ops.forEach) {
+            ops.forEach(function(op) {
+              if (op) dependentOperations.push(op);
+            });
+          } else {
+            dependentOperations.push(op);
+          }
+        }
+        return dependentOperations;
+      };
+
+      var performDependentOps = function() {
+        dependentOperations.forEach(function(operation) {
+          _this.transform(operation);
+        });
+        dependentOperations = [];
+      };
       var inverse;
 
       // console.log('Cache#transform', op, path.join('/'), value);
@@ -188,81 +211,65 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
 
       if (eq.eq(currentValue, value)) return false;
 
-      if (path.length > 2 && path[2] === '__rev') {
-        // Apply reverse link transform
-        if (this.trackRevLinkChanges) {
-          inverse = this._doc.transform(normalizedOperation, true);
-          this.emit('didTransform', normalizedOperation, inverse);
+      if (this.maintainDependencies) {
+        pushOps(this._dependentOps(normalizedOperation));
+      }
 
-        } else {
-          this._doc.transform(normalizedOperation, false);
-        }
+      if (op === 'remove' || op === 'replace') {
+        this._markForRemoval(path);
 
-      } else {
-        var dependentOperations;
-
-        if (this.maintainDependencies) {
-          dependentOperations = this._transformDependencies(normalizedOperation);
-        }
-
-        if (op === 'remove' || op === 'replace') {
-          this._markForRemoval(path);
-
-          if (this.maintainInverseLinks) {
-            if (op === 'replace') {
-              this._transformRelatedInverseLinks(normalizedOperation.spawn({
-                op: 'remove',
-                path: path
-              }));
-            }
-
-            this._transformRelatedInverseLinks(normalizedOperation);
+        if (this.maintainInverseLinks) {
+          if (op === 'replace') {
+            pushOps(this._relatedInverseLinkOps(normalizedOperation.spawn({
+              op: 'remove',
+              path: path
+            })));
           }
 
-          if (this.maintainRevLinks) {
-            this._removeRevLinks(path, normalizedOperation);
-          }
+          pushOps(this._relatedInverseLinkOps(normalizedOperation));
         }
 
-        if (this.trackChanges) {
-          inverse = this._doc.transform(normalizedOperation, true);
-          this.emit('didTransform',
-                    normalizedOperation,
-                    inverse);
-
-        } else {
-          this._doc.transform(normalizedOperation, false);
-        }
-
-        if (op === 'remove' || op === 'replace') {
-          this._unmarkForRemoval(path);
-        }
-
-        if (op === 'add' || op === 'replace') {
-          if (this.maintainRevLinks) {
-            this._addRevLinks(path, value, normalizedOperation);
-          }
-
-          if (this.maintainInverseLinks) {
-            if (op === 'replace') {
-              this._transformRelatedInverseLinks(normalizedOperation.spawn({
-                op: 'add',
-                path: path,
-                value: value
-              }));
-
-            } else {
-              this._transformRelatedInverseLinks(normalizedOperation);
-            }
-          }
-        }
-
-        if (dependentOperations) {
-          dependentOperations.forEach(function(operation) {
-            _this.transform(operation);
-          });
+        if (this.maintainRevLinks) {
+          this._removeRevLinks(path, normalizedOperation);
         }
       }
+
+      if (this.trackChanges) {
+        inverse = this._doc.transform(normalizedOperation, true);
+        this.emit('didTransform',
+                  normalizedOperation,
+                  inverse);
+
+      } else {
+        this._doc.transform(normalizedOperation, false);
+      }
+
+      performDependentOps();
+
+      if (op === 'remove' || op === 'replace') {
+        this._unmarkForRemoval(path);
+      }
+
+      if (op === 'add' || op === 'replace') {
+        if (this.maintainRevLinks) {
+          this._addRevLinks(path, value, normalizedOperation);
+        }
+
+        if (this.maintainInverseLinks) {
+          if (op === 'replace') {
+            pushOps(this._relatedInverseLinkOps(normalizedOperation.spawn({
+              op: 'add',
+              path: path,
+              value: value
+            })));
+
+          } else {
+            pushOps(this._relatedInverseLinkOps(normalizedOperation));
+          }
+        }
+      }
+
+      performDependentOps();
 
       return true;
     },
@@ -289,7 +296,7 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
     _isOperationRequired: function(operation) {
       if (operation.op === 'remove') {
         if (this._isMarkedForRemoval(operation.path)) {
-          console.log('remove op not required because marked for removal', operation.path);
+          // console.log('remove op not required because marked for removal', operation.path);
           return false;
         }
       }
@@ -297,12 +304,12 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
       var currentValue = this.retrieve(operation.path);
       var desiredValue = operation.value;
 
-      console.log('op required', !eq.eq(currentValue, desiredValue), operation);
+      // console.log('op required', !eq(currentValue, desiredValue), operation);
 
       return !eq.eq(currentValue, desiredValue);
     },
 
-    _transformDependencies: function(operation) {
+    _dependentOps: function(operation) {
       var operations = [];
       if (operation.op === 'remove' && operation.path.length === 2) {
         var _this = this,
@@ -335,7 +342,7 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
       return operations;
     },
 
-    _addRevLinks: function(path, value, parentOperation) {
+    _addRevLinks: function(path, value) {
       // console.log('_addRevLinks', path, value);
 
       if (value) {
@@ -354,11 +361,11 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
 
               if (linkSchema.type === 'hasMany') {
                 Object.keys(linkValue).forEach(function(v) {
-                  _this._addRevLink(linkSchema, type, id, link, v, parentOperation);
+                  _this._addRevLink(linkSchema, type, id, link, v);
                 });
 
               } else {
-                _this._addRevLink(linkSchema, type, id, link, linkValue, parentOperation);
+                _this._addRevLink(linkSchema, type, id, link, linkValue);
               }
             });
           }
@@ -374,12 +381,24 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
             linkValue = value;
           }
 
-          this._addRevLink(linkSchema, type, id, link, linkValue, parentOperation);
+          this._addRevLink(linkSchema, type, id, link, linkValue);
         }
       }
     },
 
-    _addRevLink: function(linkSchema, type, id, link, value, parentOperation) {
+    _revLink: function(type, id) {
+      var revForType = this._rev[type];
+      if (revForType === undefined) {
+        revForType = this._rev[type] = {};
+      }
+      var rev = revForType[id];
+      if (rev === undefined) {
+        rev = revForType[id] = {};
+      }
+      return rev;
+    },
+
+    _addRevLink: function(linkSchema, type, id, link, value) {
       // console.log('_addRevLink', linkSchema, type, id, link, value);
 
       if (value && typeof value === 'string') {
@@ -389,28 +408,8 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
         }
         linkPath = linkPath.join('/');
 
-        var refsPath = [linkSchema.model, value, '__rev'];
-        var refs = this.retrieve(refsPath);
-        if (!refs) {
-          refs = {};
-          refs[linkPath] = true;
-          this.transform(parentOperation.spawn({
-            op: 'add',
-            path: refsPath,
-            value: refs
-          }));
-
-        } else {
-          refsPath.push(linkPath);
-          refs = this.retrieve(refsPath);
-          if (!refs) {
-            this.transform(parentOperation.spawn({
-              op: 'add',
-              path: refsPath,
-              value: true
-            }));
-          }
-        }
+        var revLink = this._revLink(linkSchema.model, value);
+        revLink[linkPath] = true;
       }
     },
 
@@ -427,11 +426,11 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
 
         if (path.length === 2) {
           // when a whole record is removed, remove any links that reference it
-          if (value.__rev) {
-            // console.log('removeRefs from deleted record', type, id, value.__rev);
-
+          if (this.maintainRevLinks) {
+            var revLink = this._revLink(type, id);
             var operation;
-            Object.keys(value.__rev).forEach(function(path) {
+
+            Object.keys(revLink).forEach(function(path) {
               path = _this._doc.deserializePath(path);
 
               if (path.length === 4) {
@@ -449,6 +448,8 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
 
               _this.transform(operation);
             });
+
+            delete this._rev[type][id];
           }
 
           // when a whole record is removed, remove references corresponding to each link
@@ -459,11 +460,11 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
 
               if (linkSchema.type === 'hasMany') {
                 Object.keys(linkValue).forEach(function(v) {
-                  _this._removeRevLink(linkSchema, type, id, link, v, parentOperation);
+                  _this._removeRevLink(linkSchema, type, id, link, v);
                 });
 
               } else {
-                _this._removeRevLink(linkSchema, type, id, link, linkValue, parentOperation);
+                _this._removeRevLink(linkSchema, type, id, link, linkValue);
               }
             });
           }
@@ -479,12 +480,12 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
             linkValue = value;
           }
 
-          this._removeRevLink(linkSchema, type, id, link, linkValue, parentOperation);
+          this._removeRevLink(linkSchema, type, id, link, linkValue);
         }
       }
     },
 
-    _removeRevLink: function(linkSchema, type, id, link, value, parentOperation) {
+    _removeRevLink: function(linkSchema, type, id, link, value) {
       // console.log('_removeRevLink', linkSchema, type, id, link, value);
 
       if (value && typeof value === 'string') {
@@ -494,14 +495,12 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
         }
         linkPath = linkPath.join('/');
 
-        this.transform(parentOperation.spawn({
-          op: 'remove',
-          path: [linkSchema.model, value, '__rev', linkPath]
-        }));
+        var revLink = this._revLink(linkSchema.model, id);
+        delete revLink[linkPath];
       }
     },
 
-    _transformRelatedInverseLinks: function(operation) {
+    _relatedInverseLinkOps: function(operation) {
       var _this = this;
       var op = operation.op;
       var path = operation.path;
@@ -513,6 +512,7 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
       var linkValue;
       var inverseLinkOp;
       var relId;
+      var ops = [];
 
       if (op === 'add') {
         if (path.length > 3 && path[2] === '__rel') {
@@ -529,23 +529,23 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
 
             if (objects.isObject(relId)) {
               Object.keys(relId).forEach(function(id) {
-                _this._transformAddLink(
+                ops.push(_this._relatedAddLinkOp(
                   linkDef.model,
                   id,
                   linkDef.inverse,
                   path[1],
                   operation
-                );
+                ));
               });
 
             } else {
-              _this._transformAddLink(
+              ops.push(_this._relatedAddLinkOp(
                 linkDef.model,
                 relId,
                 linkDef.inverse,
                 path[1],
                 operation
-              );
+              ));
             }
           }
 
@@ -559,26 +559,26 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
               if (linkDef.inverse) {
                 if (linkDef.type === 'hasMany') {
                   Object.keys(record.__rel[key]).forEach(function(id) {
-                    _this._transformAddLink(
+                    ops.push(_this._relatedAddLinkOp(
                       linkDef.model,
                       id,
                       linkDef.inverse,
                       path[1],
                       operation
-                    );
+                    ));
                   });
 
                 } else {
                   var id = record.__rel[key];
 
                   if (!objects.isNone(id)) {
-                    _this._transformAddLink(
+                    ops.push(_this._relatedAddLinkOp(
                       linkDef.model,
                       id,
                       linkDef.inverse,
                       path[1],
                       operation
-                    );
+                    ));
                   }
                 }
               }
@@ -603,23 +603,23 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
             if (relId) {
               if (objects.isObject(relId)) {
                 Object.keys(relId).forEach(function(id) {
-                  _this._transformRemoveLink(
+                  ops.push(_this._relatedRemoveLinkOp(
                     linkDef.model,
                     id,
                     linkDef.inverse,
                     path[1],
                     operation
-                  );
+                  ));
                 });
 
               } else {
-                _this._transformRemoveLink(
+                ops.push(_this._relatedRemoveLinkOp(
                   linkDef.model,
                   relId,
                   linkDef.inverse,
                   path[1],
                   operation
-                );
+                ));
               }
             }
           }
@@ -634,26 +634,26 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
               if (linkDef.inverse) {
                 if (linkDef.type === 'hasMany') {
                   Object.keys(record.__rel[key]).forEach(function(id) {
-                    _this._transformRemoveLink(
+                    ops.push(_this._relatedRemoveLinkOp(
                       linkDef.model,
                       id,
                       linkDef.inverse,
                       path[1],
                       operation
-                    );
+                    ));
                   });
 
                 } else {
                   var id = record.__rel[key];
 
                   if (!objects.isNone(id)) {
-                    _this._transformRemoveLink(
+                    ops.push(_this._relatedRemoveLinkOp(
                       linkDef.model,
                       id,
                       linkDef.inverse,
                       path[1],
                       operation
-                    );
+                    ));
                   }
                 }
               }
@@ -661,42 +661,30 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
           }
         }
       }
+      return ops;
     },
 
-    _transformAddLink: function(type, id, key, value, parentOperation) {
-      // console.log('_transformAddLink', type, id, key, value);
+    _relatedAddLinkOp: function(type, id, key, value, parentOperation) {
+      // console.log('_relatedAddLinkOp', type, id, key, value);
 
       if (this.retrieve([type, id])) {
         var op = this._addLinkOp(type, id, key, value);
 
         // Apply operation only if necessary
         if (this.retrieve(op.path) !== op.value) {
-          this.transform(parentOperation.spawn(op));
+          return parentOperation.spawn(op);
         }
       }
     },
 
-    _transformRemoveLink: function(type, id, key, value, parentOperation) {
-      // console.log('_transformRemoveLink', type, id, key, value);
+    _relatedRemoveLinkOp: function(type, id, key, value, parentOperation) {
+      // console.log('_relatedRemoveLinkOp', type, id, key, value);
 
       var op = this._removeLinkOp(type, id, key, value);
 
       // Apply operation only if necessary
       if (this.retrieve(op.path) && !this._isMarkedForRemoval(op.path)) {
-        this.transform(parentOperation.spawn(op));
-      }
-    },
-
-    _transformUpdateLink: function(type, id, key, value, parentOperation) {
-      // console.log('_transformUpdateLink', type, id, key, value);
-
-      if (this.retrieve([type, id])) {
-        var op = this._updateLinkOp(type, id, key, value);
-
-        // Apply operation only if necessary
-        if (this.retrieve(op.path) !== op.value) {
-          this.transform(parentOperation.spawn(op));
-        }
+        return parentOperation.spawn(op);
       }
     },
 
@@ -1156,9 +1144,6 @@ define('orbit-common/schema', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid',
 
       // set flag
       record.__normalized = true;
-
-      // init backward links
-      record.__rev = record.__rev || {};
 
       // init forward links
       record.__rel = record.__rel || {};

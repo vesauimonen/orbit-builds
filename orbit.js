@@ -2413,7 +2413,7 @@ define('orbit/transform-connector', ['exports', 'orbit/lib/objects', 'orbit/lib/
     },
 
     resolveConflicts: function(path, currentValue, updatedValue, operation) {
-      var ops = diffs.diffs(currentValue, updatedValue, {basePath: path, ignore: ['__rev']});
+      var ops = diffs.diffs(currentValue, updatedValue, { basePath: path });
 
       if (ops) {
         var spawnedOps = ops.map(function(op) {
