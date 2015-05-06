@@ -761,7 +761,7 @@ define('orbit-common/lib/exceptions', ['exports', 'orbit/lib/exceptions'], funct
   });
 
 
-  const _RecordException = exceptions.Exception.extend({
+  var _RecordException = exceptions.Exception.extend({
     init: function(type, record, key) {
       this.type = type;
       this.record = record;
