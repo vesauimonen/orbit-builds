@@ -1053,6 +1053,10 @@ define('orbit/lib/diffs', ['exports', 'orbit/lib/eq', 'orbit/lib/objects', 'orbi
                 bi++;
               }
             }
+          } else if (a instanceof Date) {
+            if (a.getTime() === b.getTime()) return;
+            if (d === undefined) d = [];
+            d.push({op: 'replace', path: basePath, value: objects.clone(b)});
 
           } else { // general (non-array) object
             for (i in b) {
@@ -1175,7 +1179,19 @@ define('orbit/lib/exceptions', ['exports', 'orbit/lib/objects'], function (expor
 
   'use strict';
 
-  var Exception = objects.Class.extend();
+  var Exception = objects.Class.extend({
+    init: function(message) {
+      this.message = message;
+      this.error = new Error(this.toString());
+      this.stack = this.error.stack;
+    },
+
+    name: 'Orbit.Exception',
+
+    toString: function() {
+      return this.name + ': ' + this.message;
+    },
+  });
 
   /**
    Exception thrown when a path in a document can not be found.
@@ -1188,7 +1204,10 @@ define('orbit/lib/exceptions', ['exports', 'orbit/lib/objects'], function (expor
   var PathNotFoundException = Exception.extend({
     init: function(path) {
       this.path = path;
-    }
+      this._super(path.join('/'));
+    },
+
+    name: 'Orbit.PathNotFoundException',
   });
 
   exports.Exception = Exception;

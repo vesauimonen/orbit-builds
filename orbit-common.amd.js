@@ -752,29 +752,28 @@ define('orbit-common/cache', ['exports', 'orbit/document', 'orbit/evented', 'orb
   exports['default'] = Cache;
 
 });
-define('orbit-common/lib/exceptions', ['exports'], function (exports) {
+define('orbit-common/lib/exceptions', ['exports', 'orbit/lib/exceptions'], function (exports, exceptions) {
 
   'use strict';
 
-  /**
-   @module orbit-common
-   */
+  var OperationNotAllowed = exceptions.Exception.extend({
+    name: 'OC.OperationNotAllowed',
+  });
 
-  /**
-   Exception thrown when an operation is not allowed.
 
-   @class OperationNotAllowed
-   @namespace OC
-   @param {Object} description
-   @constructor
-   */
-  var OperationNotAllowed = function(description) {
-    this.description = description;
-  };
+  const _RecordException = exceptions.Exception.extend({
+    init: function(type, record, key) {
+      this.type = type;
+      this.record = record;
+      var message = type + '/' + record;
 
-  OperationNotAllowed.prototype = {
-    constructor: OperationNotAllowed
-  };
+      if (key) {
+        this.key = key;
+        message += '/' + key;
+      }
+      this._super(message);
+    },
+  });
 
   /**
    Exception thrown when a record can not be found.
@@ -785,14 +784,9 @@ define('orbit-common/lib/exceptions', ['exports'], function (exports) {
    @param {Object} record
    @constructor
    */
-  var RecordNotFoundException = function(type, record) {
-    this.type = type;
-    this.record = record;
-  };
-
-  RecordNotFoundException.prototype = {
-    constructor: RecordNotFoundException
-  };
+  var RecordNotFoundException = _RecordException.extend({
+    name: 'OC.RecordNotFoundException',
+  });
 
   /**
    Exception thrown when a record can not be found.
@@ -803,15 +797,9 @@ define('orbit-common/lib/exceptions', ['exports'], function (exports) {
    @param {Object} record
    @constructor
    */
-  var LinkNotFoundException = function(type, record, key) {
-    this.type = type;
-    this.record = record;
-    this.key = key;
-  };
-
-  LinkNotFoundException.prototype = {
-    constructor: LinkNotFoundException
-  };
+  var LinkNotFoundException = _RecordException.extend({
+    name: 'OC.LinkNotFoundException',
+  });
 
   /**
    Exception thrown when a record already exists.
@@ -822,14 +810,9 @@ define('orbit-common/lib/exceptions', ['exports'], function (exports) {
    @param {Object} record
    @constructor
    */
-  var RecordAlreadyExistsException = function(type, record) {
-    this.type = type;
-    this.record = record;
-  };
-
-  RecordAlreadyExistsException.prototype = {
-    constructor: RecordAlreadyExistsException
-  };
+  var RecordAlreadyExistsException = _RecordException.extend({
+    name: 'OC.RecordAlreadyExistsException',
+  });
 
   exports.OperationNotAllowed = OperationNotAllowed;
   exports.RecordNotFoundException = RecordNotFoundException;
