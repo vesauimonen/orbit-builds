@@ -1,4 +1,4 @@
-define('orbit', ['exports', 'orbit/main', 'orbit/action', 'orbit/action-queue', 'orbit/document', 'orbit/evented', 'orbit/notifier', 'orbit/operation', 'orbit/requestable', 'orbit/request-connector', 'orbit/transaction', 'orbit/transformable', 'orbit/transformation', 'orbit/transform-connector', 'orbit/lib/assert', 'orbit/lib/config', 'orbit/lib/deprecate', 'orbit/lib/diffs', 'orbit/lib/eq', 'orbit/lib/exceptions', 'orbit/lib/functions', 'orbit/lib/objects', 'orbit/lib/strings', 'orbit/lib/stubs', 'orbit/lib/uuid'], function (exports, Orbit, Action, ActionQueue, Document, Evented, Notifier, Operation, Requestable, RequestConnector, Transaction, Transformable, Transformation, TransformConnector, assert, config, deprecate, diffs, eq, exceptions, functions, objects, strings, stubs, uuid) {
+define('orbit', ['exports', 'orbit/main', 'orbit/action', 'orbit/action-queue', 'orbit/document', 'orbit/evented', 'orbit/notifier', 'orbit/operation', 'orbit/requestable', 'orbit/request-connector', 'orbit/transaction', 'orbit/transformable', 'orbit/transformation', 'orbit/transform-connector', 'orbit/lib/assert', 'orbit/lib/config', 'orbit/lib/deprecate', 'orbit/lib/diffs', 'orbit/lib/eq', 'orbit/lib/exceptions', 'orbit/lib/functions', 'orbit/lib/objects', 'orbit/lib/operations', 'orbit/lib/strings', 'orbit/lib/stubs', 'orbit/lib/uuid'], function (exports, Orbit, Action, ActionQueue, Document, Evented, Notifier, Operation, Requestable, RequestConnector, Transaction, Transformable, Transformation, TransformConnector, assert, config, deprecate, diffs, eq, exceptions, functions, objects, operations, strings, stubs, uuid) {
 
 	'use strict';
 
@@ -32,6 +32,7 @@ define('orbit', ['exports', 'orbit/main', 'orbit/action', 'orbit/action-queue', 
 	Orbit['default'].isArray = objects.isArray;
 	Orbit['default'].isObject = objects.isObject;
 	Orbit['default'].isNone = objects.isNone;
+	Orbit['default'].coalesceOperations = operations.coalesceOperations;
 	Orbit['default'].capitalize = strings.capitalize;
 	Orbit['default'].noop = stubs.noop;
 	Orbit['default'].required = stubs.required;
