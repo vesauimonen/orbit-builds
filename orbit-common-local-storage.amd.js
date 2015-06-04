@@ -43,7 +43,7 @@ define('orbit-common/local-storage-source', ['exports', 'orbit/lib/assert', 'orb
       for (var key in window.localStorage) {
         if (key.indexOf(this.namespace) === 0) {
           var path = key.split(this.delimeter);
-          var item = JSON.parse(window.localStorage.getItem(key));
+          var item = JSON.parse(window.localStorage[key]);
           this._cache._doc._data[path[1]][path[2]] = item;
         }
       }
@@ -79,10 +79,10 @@ define('orbit-common/local-storage-source', ['exports', 'orbit/lib/assert', 'orb
       var obj = this.retrieve([operation.path[0], operation.path[1]]);
 
       if (operation.op === 'add' || operation.op === 'replace') {
-        window.localStorage.setItem(this.getKey(operation.path), JSON.stringify(obj));
+        window.localStorage[this.getKey(operation.path)] = JSON.stringify(obj);
       }
       if (operation.op === 'remove') {
-        window.localStorage.removeItem(this.getKey(operation.path));
+        delete window.localStorage[this.getKey(operation.path)];
       }
       this._isDirty = false;
     }
