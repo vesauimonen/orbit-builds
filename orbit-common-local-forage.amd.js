@@ -10,6 +10,42 @@ define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/
     }
   };
 
+  var now = Date.now || function() {
+    return new Date().getTime();
+  };
+
+  var debounce = function(func, wait, immediate) {
+    var timeout, args, context, timestamp, result;
+
+    var later = function() {
+      var last = now() - timestamp;
+
+      if (last < wait && last >= 0) {
+        timeout = setTimeout(later, wait - last);
+      } else {
+        timeout = null;
+        if (!immediate) {
+          result = func.apply(context, args);
+          if (!timeout) context = args = null;
+        }
+      }
+    };
+
+    return function() {
+      context = this;
+      args = arguments;
+      timestamp = now();
+      var callNow = immediate && !timeout;
+      if (!timeout) timeout = setTimeout(later, wait);
+      if (callNow) {
+        result = func.apply(context, args);
+        context = args = null;
+      }
+
+      return result;
+    };
+  };
+
   /**
    Source for storing data with local forage (https://github.com/mozilla/localForage)
 
@@ -22,13 +58,13 @@ define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/
    */
   var LocalForageSource = MemorySource['default'].extend({
     init: function(schema, options) {
-      var _this = this;
-
       assert.assert('Your browser does not support local storage!', supportsLocalStorage()); //needed as final fallback
       assert.assert('No valid local forage object given', options['localforage'] !== undefined);
       assert.assert('Local forage requires Orbit.Promise be defined', Orbit['default'].Promise);
 
-      this._super.apply(this, arguments);
+      var _this = this;
+
+      MemorySource['default'].prototype.init.apply(this, arguments);
 
       options = options || {};
       this.saveDataCallback = options['saveDataCallback'];
@@ -49,11 +85,14 @@ define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/
 
       this._isDirty = false;
 
-      this.on('didTransform', function(operation) {
-        return this._saveData(operation).then(function() {
-          if (options.saveDataCallback) setTimeout(_this.saveDataCallback, 0);
-        });
-      }, this);
+      this.on('didTransform', debounce(function() {
+        var promise = this._saveData();
+        if (promise) {
+          promise.then(function() {
+            if (options.saveDataCallback) setTimeout(_this.saveDataCallback, 0);
+          });
+        }
+      }, 200), this);
 
       if (autoload) this.load().then(function() {
         if (options.loadDataCallback) setTimeout(options.callback, 0);
@@ -62,25 +101,13 @@ define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/
 
     load: function() {
       var _this = this;
-      return _this.localforage.keys().then(function(keys) {
-        if (keys.length === 0) {
-          _this.reset(_this.retrieve());
-        }
-
-        return new Orbit['default'].Promise.all(keys.filter(hasNamespace).map(keyToPromise));
-
-        function hasNamespace(key) {
-          return key.indexOf(_this.namespace + '/') === 0;
-        }
-
-        function keyToPromise(key) {
-          return _this.localforage.getItem(key).then(saveToCache.bind(_this, key));
-        }
-
-        function saveToCache(key, object) {
-          var path = key.split('/');
-          _this._cache._doc._data[path[1]][path[2]] = object;
-        }
+      return new Orbit['default'].Promise(function(resolve, reject) {
+        _this.localforage.getItem(this.namespace).then(function(storage){
+          if (storage !== null) {
+            _this.reset(JSON.parse(storage));
+          }
+          resolve();
+        });
       });
     },
 
@@ -101,13 +128,18 @@ define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/
     // Internals
     /////////////////////////////////////////////////////////////////////////////
 
-    _saveData: function(operation) {
+    _saveData: function(forceSave) {
       var _this = this; //bind not supported in older browsers
-      var key = [this.namespace, operation.path[0], operation.path[1]].join('/');
-      var data = this.retrieve([operation.path[0], operation.path[1]]);
-      return this.localforage.setItem(key, data).then(function() {
-        _this._isDirty = false;
-      });
+      if (!this._autosave && !forceSave) {
+        this._isDirty = true;
+        return;
+      }
+      return this.localforage.setItem(this.namespace, this.retrieve()).then(
+        function() {
+          _this._isDirty = false;
+        }
+      );
+
     }
   });
 
