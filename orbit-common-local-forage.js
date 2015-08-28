@@ -92,7 +92,7 @@ define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/
       this._isDirty = false;
 
       this.on('didTransform', debounce(function() {
-        var promise = this._saveData();
+        var promise = _this._saveData();
         if (promise) {
           promise.then(function() {
             if (options.saveDataCallback) setTimeout(_this.saveDataCallback, 0);
