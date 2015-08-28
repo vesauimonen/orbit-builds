@@ -1,196 +1,3 @@
-define('orbit-common/jsonapi-patch-source', ['exports', 'orbit/lib/objects', 'orbit-common/jsonapi-source'], function (exports, objects, JSONAPISource) {
-
-  'use strict';
-
-  exports['default'] = JSONAPISource['default'].extend({
-
-    /////////////////////////////////////////////////////////////////////////////
-    // Internals
-    /////////////////////////////////////////////////////////////////////////////
-
-    _transformAdd: function(operation) {
-      var _this = this;
-      var type = operation.path[0];
-      var id = operation.path[1];
-
-      var remoteOp = {
-        op: 'add',
-        path: '/-',
-        value: this.serializer.serializeRecord(type, operation.value)
-      };
-
-      return this.ajax(this.resourceURL(type), 'PATCH', {data: [ remoteOp ]}).then(
-        function(raw) {
-          if (raw && objects.isArray(raw)) {
-            _this.deserialize(type, id, raw[0], operation);
-          } else {
-            _this._transformCache(operation);
-          }
-        }
-      );
-    },
-
-    _transformReplace: function(operation) {
-      var _this = this;
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var value = operation.value;
-
-      var remoteOp = {
-        op: 'replace',
-        path: '/',
-        value: this.serializer.serializeRecord(type, value)
-      };
-
-      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: [ remoteOp ]}).then(
-        function(raw) {
-          if (raw && objects.isArray(raw)) {
-            _this.deserialize(type, id, raw[0], operation);
-          } else {
-            _this._transformCache(operation);
-          }
-        }
-      );
-    },
-
-    _transformRemove: function(operation) {
-      var _this = this;
-      var type = operation.path[0];
-      var id = operation.path[1];
-
-      var remoteOp = {
-        op: 'remove',
-        path: '/'
-      };
-
-      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: [ remoteOp ]}).then(
-        function() {
-          _this._transformCache(operation);
-        }
-      );
-    },
-
-    _transformAddLink: function(operation) {
-      var _this = this;
-
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var link = operation.path[3];
-      var relId = operation.path[4] || operation.value;
-      var linkDef = this.schema.linkDefinition(type, link);
-      var relType = linkDef.model;
-      var relResourceId = this.serializer.resourceId(relType, relId);
-      var remoteOp;
-
-      if (linkDef.type === 'hasMany') {
-        remoteOp = {
-          op: 'add',
-          path: '/-',
-          value: relResourceId
-        };
-      } else {
-        remoteOp = {
-          op: 'replace',
-          path: '/',
-          value: relResourceId
-        };
-      }
-
-      return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
-        function() {
-          _this._transformCache(operation);
-        }
-      );
-    },
-
-    _transformRemoveLink: function(operation) {
-      var _this = this;
-
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var link = operation.path[3];
-      var linkDef = this.schema.linkDefinition(type, link);
-      var remoteOp;
-
-      if (linkDef.type === 'hasMany') {
-        var relId = operation.path[4];
-        var relType = linkDef.model;
-        var relResourceId = this.serializer.resourceId(relType, relId);
-
-        remoteOp = {
-          op: 'remove',
-          path: '/' + relResourceId
-        };
-      } else {
-        remoteOp = {
-          op: 'remove',
-          path: '/'
-        };
-      }
-
-      return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
-        function() {
-          _this._transformCache(operation);
-        }
-      );
-    },
-
-    _transformReplaceLink: function(operation) {
-      var _this = this;
-
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var link = operation.path[3];
-      var relId = operation.path[4] || operation.value;
-
-      // Convert a map of ids to an array
-      if (objects.isObject(relId)) {
-        relId = Object.keys(relId);
-      }
-
-      var linkDef = this.schema.linkDefinition(type, link);
-      var relType = linkDef.model;
-      var relResourceId = this.serializer.resourceId(relType, relId);
-      var remoteOp;
-
-      remoteOp = {
-        op: 'replace',
-        path: '/',
-        value: relResourceId
-      };
-
-      return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
-        function() {
-          _this._transformCache(operation);
-        }
-      );
-    },
-
-    _transformUpdateAttribute: function(operation) {
-      var _this = this;
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var attr = operation.path[2];
-
-      var remoteOp = {
-        op: 'replace',
-        path: '/' + attr,
-        value: operation.value
-      };
-
-      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: [ remoteOp ]}).then(
-        function() {
-          _this._transformCache(operation);
-        }
-      );
-    },
-
-    ajaxContentType: function(url, method) {
-      return 'application/vnd.api+json; ext=jsonpatch; charset=utf-8';
-    }
-  });
-
-});
 define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer', 'orbit/lib/objects'], function (exports, Serializer, objects) {
 
   'use strict';
@@ -481,6 +288,7 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       this.namespace        = options.namespace || this.namespace;
       this.host             = options.host || this.host;
       this.headers          = options.headers || this.headers;
+      this.usePatch         = options.usePatch !== undefined ? options.usePatch : this.usePatch;
       this.SerializerClass  = options.SerializerClass || this.SerializerClass;
 
       // If `SerializerClass` is obtained through the _super chain, dereference
@@ -501,6 +309,7 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
     host: null,
     headers: null,
     SerializerClass: JSONAPISerializer['default'],
+    usePatch: false,
 
     /////////////////////////////////////////////////////////////////////////////
     // Transformable interface implementation
@@ -570,7 +379,7 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       var _this = this;
       return this.ajax(this.resourceLinkURL(type, id, link), 'GET').then(
         function(raw) {
-          var linkDef = _this.schema.linkDefinition(type, link);
+          var linkDef = _this.schema.models[type].links[link];
           var relId = _this.serializer.deserializeLink(linkDef.model, raw);
 
           return _this.settleTransforms().then(function() {
@@ -605,6 +414,14 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
     /////////////////////////////////////////////////////////////////////////////
 
     _transformAdd: function(operation) {
+      if (this.usePatch) {
+        return this._transformAddWithPatch(operation);
+      } else {
+        return this._transformAddStd(operation);
+      }
+    },
+
+    _transformAddStd: function(operation) {
       var _this = this;
       var type = operation.path[0];
       var id = operation.path[1];
@@ -617,7 +434,37 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       );
     },
 
+    _transformAddWithPatch: function(operation) {
+      var _this = this;
+      var type = operation.path[0];
+      var id = operation.path[1];
+
+      var remoteOp = {
+        op: 'add',
+        path: '/-',
+        value: this.serializer.serializeRecord(type, operation.value)
+      };
+
+      return this.ajax(this.resourceURL(type), 'PATCH', {data: [ remoteOp ]}).then(
+        function(raw) {
+          if (raw && objects.isArray(raw)) {
+            _this.deserialize(type, id, raw[0], operation);
+          } else {
+            _this._transformCache(operation);
+          }
+        }
+      );
+    },
+
     _transformReplace: function(operation) {
+      if (this.usePatch) {
+        return this._transformReplaceWithPatch(operation);
+      } else {
+        return this._transformReplaceStd(operation);
+      }
+    },
+
+    _transformReplaceStd: function(operation) {
       var _this = this;
       var type = operation.path[0];
       var id = operation.path[1];
@@ -637,7 +484,38 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       );
     },
 
+    _transformReplaceWithPatch: function(operation) {
+      var _this = this;
+      var type = operation.path[0];
+      var id = operation.path[1];
+      var value = operation.value;
+
+      var remoteOp = {
+        op: 'replace',
+        path: '/',
+        value: this.serializer.serializeRecord(type, value)
+      };
+
+      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: [ remoteOp ]}).then(
+        function(raw) {
+          if (raw && objects.isArray(raw)) {
+            _this.deserialize(type, id, raw[0], operation);
+          } else {
+            _this._transformCache(operation);
+          }
+        }
+      );
+    },
+
     _transformRemove: function(operation) {
+      if (this.usePatch) {
+        return this._transformRemoveWithPatch(operation);
+      } else {
+        return this._transformRemoveStd(operation);
+      }
+    },
+
+    _transformRemoveStd: function(operation) {
       var _this = this;
       var type = operation.path[0];
       var id = operation.path[1];
@@ -647,7 +525,32 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       });
     },
 
+    _transformRemoveWithPatch: function(operation) {
+      var _this = this;
+      var type = operation.path[0];
+      var id = operation.path[1];
+
+      var remoteOp = {
+        op: 'remove',
+        path: '/'
+      };
+
+      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: [ remoteOp ]}).then(
+        function() {
+          _this._transformCache(operation);
+        }
+      );
+    },
+
     _transformAddLink: function(operation) {
+      if (this.usePatch) {
+        return this._transformAddLinkWithPatch(operation);
+      } else {
+        return this._transformAddLinkStd(operation);
+      }
+    },
+
+    _transformAddLinkStd: function(operation) {
       var _this = this;
 
       var type = operation.path[0];
@@ -655,7 +558,7 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       var link = operation.path[3];
       var relId = operation.path[4] || operation.value;
 
-      var linkDef = this.schema.linkDefinition(type, link);
+      var linkDef = this.schema.models[type].links[link];
       var relType = linkDef.model;
       var relResourceType = this.serializer.resourceType(relType);
       var relResourceId = this.serializer.resourceId(relType, relId);
@@ -671,7 +574,48 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       );
     },
 
+    _transformAddLinkWithPatch: function(operation) {
+      var _this = this;
+
+      var type = operation.path[0];
+      var id = operation.path[1];
+      var link = operation.path[3];
+      var relId = operation.path[4] || operation.value;
+      var linkDef = this.schema.models[type].links[link];
+      var relType = linkDef.model;
+      var relResourceId = this.serializer.resourceId(relType, relId);
+      var remoteOp;
+
+      if (linkDef.type === 'hasMany') {
+        remoteOp = {
+          op: 'add',
+          path: '/-',
+          value: relResourceId
+        };
+      } else {
+        remoteOp = {
+          op: 'replace',
+          path: '/',
+          value: relResourceId
+        };
+      }
+
+      return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
+        function() {
+          _this._transformCache(operation);
+        }
+      );
+    },
+
     _transformRemoveLink: function(operation) {
+      if (this.usePatch) {
+        return this._transformRemoveLinkWithPatch(operation);
+      } else {
+        return this._transformRemoveLinkStd(operation);
+      }
+    },
+
+    _transformRemoveLinkStd: function(operation) {
       var _this = this;
 
       var type = operation.path[0];
@@ -686,7 +630,47 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       );
     },
 
+    _transformRemoveLinkWithPatch: function(operation) {
+      var _this = this;
+
+      var type = operation.path[0];
+      var id = operation.path[1];
+      var link = operation.path[3];
+      var linkDef = this.schema.models[type].links[link];
+      var remoteOp;
+
+      if (linkDef.type === 'hasMany') {
+        var relId = operation.path[4];
+        var relType = linkDef.model;
+        var relResourceId = this.serializer.resourceId(relType, relId);
+
+        remoteOp = {
+          op: 'remove',
+          path: '/' + relResourceId
+        };
+      } else {
+        remoteOp = {
+          op: 'remove',
+          path: '/'
+        };
+      }
+
+      return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
+        function() {
+          _this._transformCache(operation);
+        }
+      );
+    },
+
     _transformReplaceLink: function(operation) {
+      if (this.usePatch) {
+        return this._transformReplaceLinkWithPatch(operation);
+      } else {
+        return this._transformReplaceLinkStd(operation);
+      }
+    },
+
+    _transformReplaceLinkStd: function(operation) {
       var _this = this;
 
       var type = operation.path[0];
@@ -699,7 +683,7 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
         relId = Object.keys(relId);
       }
 
-      var linkDef = this.schema.linkDefinition(type, link);
+      var linkDef = this.schema.models[type].links[link];
       var relType = linkDef.model;
       var relResourceType = this.serializer.resourceType(relType);
       var relResourceId = this.serializer.resourceId(relType, relId);
@@ -715,7 +699,46 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       );
     },
 
+    _transformReplaceLinkWithPatch: function(operation) {
+      var _this = this;
+
+      var type = operation.path[0];
+      var id = operation.path[1];
+      var link = operation.path[3];
+      var relId = operation.path[4] || operation.value;
+
+      // Convert a map of ids to an array
+      if (objects.isObject(relId)) {
+        relId = Object.keys(relId);
+      }
+
+      var linkDef = this.schema.models[type].links[link];
+      var relType = linkDef.model;
+      var relResourceId = this.serializer.resourceId(relType, relId);
+      var remoteOp;
+
+      remoteOp = {
+        op: 'replace',
+        path: '/',
+        value: relResourceId
+      };
+
+      return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
+        function() {
+          _this._transformCache(operation);
+        }
+      );
+    },
+
     _transformUpdateAttribute: function(operation) {
+      if (this.usePatch) {
+        return this._transformUpdateAttributeWithPatch(operation);
+      } else {
+        return this._transformUpdateAttributeStd(operation);
+      }
+    },
+
+    _transformUpdateAttributeStd: function(operation) {
       var _this = this;
       var type = operation.path[0];
       var id = operation.path[1];
@@ -733,6 +756,25 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
 
       return this.ajax(this.resourceURL(type, id), 'PUT', {data: json}).then(
         function(raw) {
+          _this._transformCache(operation);
+        }
+      );
+    },
+
+    _transformUpdateAttributeWithPatch: function(operation) {
+      var _this = this;
+      var type = operation.path[0];
+      var id = operation.path[1];
+      var attr = operation.path[2];
+
+      var remoteOp = {
+        op: 'replace',
+        path: '/' + attr,
+        value: operation.value
+      };
+
+      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: [ remoteOp ]}).then(
+        function() {
           _this._transformCache(operation);
         }
       );
@@ -807,23 +849,21 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       if (this.retrieve(pathToVerify) !== undefined) {
         // transforming the cache will trigger a call to `_cacheDidTransform`,
         // which will then trigger `didTransform`
-        inverse = this._cache.transform(operation);
+        this._cache.transform(operation);
 
       } else if (operation.op === 'replace') {
         // try adding instead of replacing if the cache does not yet contain
         // the data
         operation.op = 'add';
-        inverse = this._transformCache(operation);
+        this._transformCache(operation);
 
       } else {
         // if the cache can't be transformed because, still trigger `didTransform`
         //
         // NOTE: this is not an error condition, since the local cache will often
         // be sparsely populated compared with the remote store
-        inverse = [];
+        this.didTransform(operation, []);
       }
-
-      this.didTransform(operation, []);
     },
 
     _resourceIdURLSegment: function(type, id) {
@@ -851,8 +891,14 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
         // console.log('ajax start', method, url);
 
         if (hash.data && method !== 'GET') {
+          // If contentType has not been specified, use the appropriate type
+          // according to the JSON API spec
           if (!hash.contentType) {
-            hash.contentType = _this.ajaxContentType(hash);
+            if (method === 'PATCH') {
+              hash.contentType = 'application/json-patch+json; charset=utf-8';
+            } else {
+              hash.contentType = 'application/vnd.api+json; charset=utf-8';
+            }
           }
           hash.data = JSON.stringify(hash.data);
         }
@@ -884,10 +930,6 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
 
         Orbit['default'].ajax(hash);
       });
-    },
-
-    ajaxContentType: function(url, method) {
-      return 'application/vnd.api+json; charset=utf-8';
     },
 
     ajaxHeaders: function() {
@@ -930,7 +972,7 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       url += '/links/' + this.serializer.resourceLink(type, link);
 
       if (relId) {
-        var linkDef = this.schema.linkDefinition(type, link);
+        var linkDef = this.schema.models[type].links[link];
 
         url += '/' + this._resourceIdURLSegment(linkDef.model, relId);
       }
