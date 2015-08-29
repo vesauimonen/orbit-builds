@@ -109,7 +109,7 @@ define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/
       var _this = this;
       return new Orbit['default'].Promise(function(resolve, reject) {
         _this.localforage.getItem(_this.namespace).then(function(storage){
-          if (storage !== null) {
+          if (storage) {
             _this.reset(storage);
           }
           resolve();
