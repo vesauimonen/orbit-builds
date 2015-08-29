@@ -4,7 +4,7 @@
 var define = window.Orbit.__define__;
 var requireModule = window.Orbit.__requireModule__;
 
-define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/assert', 'orbit/lib/objects', 'orbit-common/memory-source'], function (exports, Orbit, assert, objects, MemorySource) {
+define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/assert', 'orbit/lib/functions', 'orbit/lib/objects', 'orbit-common/memory-source'], function (exports, Orbit, assert, functions, objects, MemorySource) {
 
   'use strict';
 
@@ -14,42 +14,6 @@ define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/
     } catch(e) {
       return false;
     }
-  };
-
-  var now = Date.now || function() {
-    return new Date().getTime();
-  };
-
-  var debounce = function(func, wait, immediate) {
-    var timeout, args, context, timestamp, result;
-
-    var later = function() {
-      var last = now() - timestamp;
-
-      if (last < wait && last >= 0) {
-        timeout = setTimeout(later, wait - last);
-      } else {
-        timeout = null;
-        if (!immediate) {
-          result = func.apply(context, args);
-          if (!timeout) context = args = null;
-        }
-      }
-    };
-
-    return function() {
-      context = this;
-      args = arguments;
-      timestamp = now();
-      var callNow = immediate && !timeout;
-      if (!timeout) timeout = setTimeout(later, wait);
-      if (callNow) {
-        result = func.apply(context, args);
-        context = args = null;
-      }
-
-      return result;
-    };
   };
 
   /**
@@ -91,7 +55,7 @@ define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/
 
       this._isDirty = false;
 
-      this.on('didTransform', debounce(function() {
+      this.on('didTransform', functions.debounce(function() {
         var promise = _this._saveData();
         if (promise) {
           promise.then(function() {
