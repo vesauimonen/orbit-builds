@@ -41,17 +41,8 @@ define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/
       this.loadDataCallback = options['loadDataCallback'];
       this.namespace = options['namespace'] || 'orbit'; // local storage key
       this._autosave = options['autosave'] !== undefined ? options['autosave'] : true;
-      this.webSQLSize = options['webSQLSize'] !== undefined ? options['webSQLSize'] : 4980736;
       var autoload = options['autoload'] !== undefined ? options['autoload'] : true;
       this.localforage = options['localforage'];
-
-      this.localforage.config({
-        name        : 'orbitjs',
-        version     : 1.0,
-        size        : this.webSQLSize,
-        storeName   : this.namespace,
-        description : 'orbitjs localforage adapter'
-      });
 
       this._isDirty = false;
 
