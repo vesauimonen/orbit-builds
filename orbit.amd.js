@@ -1,41 +1,52 @@
-define('orbit', ['exports', 'orbit/main', 'orbit/action', 'orbit/action-queue', 'orbit/document', 'orbit/evented', 'orbit/notifier', 'orbit/operation', 'orbit/requestable', 'orbit/request-connector', 'orbit/transaction', 'orbit/transformable', 'orbit/transformation', 'orbit/transform-connector', 'orbit/lib/assert', 'orbit/lib/config', 'orbit/lib/diffs', 'orbit/lib/eq', 'orbit/lib/exceptions', 'orbit/lib/objects', 'orbit/lib/strings', 'orbit/lib/stubs', 'orbit/lib/uuid'], function (exports, Orbit, Action, ActionQueue, Document, Evented, Notifier, Operation, Requestable, RequestConnector, Transaction, Transformable, Transformation, TransformConnector, assert, config, diffs, eq, exceptions, objects, strings, stubs, uuid) {
+define('orbit', ['exports', 'orbit/main', 'orbit/action', 'orbit/action-queue', 'orbit/document', 'orbit/evented', 'orbit/notifier', 'orbit/operation', 'orbit/requestable', 'orbit/request-connector', 'orbit/transformable', 'orbit/transform', 'orbit/transform-connector', 'orbit/lib/assert', 'orbit/lib/config', 'orbit/lib/deprecate', 'orbit/lib/diffs', 'orbit/lib/eq', 'orbit/lib/exceptions', 'orbit/lib/functions', 'orbit/lib/objects', 'orbit/lib/operations', 'orbit/lib/strings', 'orbit/lib/stubs', 'orbit/lib/uuid'], function (exports, Orbit, Action, ActionQueue, Document, Evented, Notifier, Operation, Requestable, RequestConnector, Transformable, Transform, TransformConnector, assert, config, deprecate, diffs, eq, exceptions, functions, objects, operations, strings, stubs, uuid) {
 
-	'use strict';
+  'use strict';
 
-	Orbit['default'].Action = Action['default'];
-	Orbit['default'].ActionQueue = ActionQueue['default'];
-	Orbit['default'].Document = Document['default'];
-	Orbit['default'].Evented = Evented['default'];
-	Orbit['default'].Notifier = Notifier['default'];
-	Orbit['default'].Operation = Operation['default'];
-	Orbit['default'].Requestable = Requestable['default'];
-	Orbit['default'].RequestConnector = RequestConnector['default'];
-	Orbit['default'].Transaction = Transaction['default'];
-	Orbit['default'].Transformable = Transformable['default'];
-	Orbit['default'].Transformation = Transformation['default'];
-	Orbit['default'].TransformConnector = TransformConnector['default'];
-	// lib fns
-	Orbit['default'].assert = assert.assert;
-	Orbit['default'].arrayToOptions = config.arrayToOptions;
-	Orbit['default'].diffs = diffs.diffs;
-	Orbit['default'].eq = eq.eq;
-	Orbit['default'].Exception = exceptions.Exception;
-	Orbit['default'].PathNotFoundException = exceptions.PathNotFoundException;
-	Orbit['default'].Class = objects.Class;
-	Orbit['default'].clone = objects.clone;
-	Orbit['default'].defineClass = objects.defineClass;
-	Orbit['default'].expose = objects.expose;
-	Orbit['default'].extend = objects.extend;
-	Orbit['default'].extendClass = objects.extendClass;
-	Orbit['default'].isArray = objects.isArray;
-	Orbit['default'].isObject = objects.isObject;
-	Orbit['default'].isNone = objects.isNone;
-	Orbit['default'].capitalize = strings.capitalize;
-	Orbit['default'].noop = stubs.noop;
-	Orbit['default'].required = stubs.required;
-	Orbit['default'].uuid = uuid.uuid;
+  if (typeof Promise !== 'undefined') {
+    Orbit['default'].Promise = Promise;
+  }
 
-	exports['default'] = Orbit['default'];
+  Orbit['default'].Action = Action['default'];
+  Orbit['default'].ActionQueue = ActionQueue['default'];
+  Orbit['default'].Document = Document['default'];
+  Orbit['default'].Evented = Evented['default'];
+  Orbit['default'].Notifier = Notifier['default'];
+  Orbit['default'].Operation = Operation['default'];
+  Orbit['default'].Requestable = Requestable['default'];
+  Orbit['default'].RequestConnector = RequestConnector['default'];
+  Orbit['default'].Transformable = Transformable['default'];
+  Orbit['default'].Transform = Transform['default'];
+  Orbit['default'].TransformConnector = TransformConnector['default'];
+  // lib fns
+  Orbit['default'].assert = assert.assert;
+  Orbit['default'].arrayToOptions = config.arrayToOptions;
+  Orbit['default'].deprecate = deprecate.deprecate;
+  Orbit['default'].diffs = diffs.diffs;
+  Orbit['default'].eq = eq.eq;
+  Orbit['default'].Exception = exceptions.Exception;
+  Orbit['default'].PathNotFoundException = exceptions.PathNotFoundException;
+  Orbit['default'].spread = functions.spread;
+  Orbit['default'].Class = objects.Class;
+  Orbit['default'].clone = objects.clone;
+  Orbit['default'].defineClass = objects.defineClass;
+  Orbit['default'].expose = objects.expose;
+  Orbit['default'].extend = objects.extend;
+  Orbit['default'].extendClass = objects.extendClass;
+  Orbit['default'].isArray = objects.isArray;
+  Orbit['default'].toArray = objects.toArray;
+  Orbit['default'].isObject = objects.isObject;
+  Orbit['default'].isNone = objects.isNone;
+  Orbit['default'].coalesceOperations = operations.coalesceOperations;
+  Orbit['default'].capitalize = strings.capitalize;
+  Orbit['default'].camelize = strings.camelize;
+  Orbit['default'].decamelize = strings.decamelize;
+  Orbit['default'].dasherize = strings.dasherize;
+  Orbit['default'].underscore = strings.underscore;
+  Orbit['default'].noop = stubs.noop;
+  Orbit['default'].required = stubs.required;
+  Orbit['default'].uuid = uuid.uuid;
+
+  exports['default'] = Orbit['default'];
 
 });
 define('orbit/action-queue', ['exports', 'orbit/main', 'orbit/action', 'orbit/evented', 'orbit/lib/assert', 'orbit/lib/objects'], function (exports, Orbit, Action, Evented, assert, objects) {
@@ -224,14 +235,17 @@ define('orbit/document', ['exports', 'orbit/lib/objects', 'orbit/lib/diffs', 'or
     /**
      Retrieve the value at a path.
 
-     Throws `PathNotFoundException` if the path does not exist in the document.
+     If the path does not exist in the document, `PathNotFoundException` will be
+     thrown by default. If `quiet` is truthy, `undefined` will be returned
+     instead.
 
      @method retrieve
-     @param {Array or String} path
-     @returns {Object} Object at the specified `path`
+     @param {Array or String} [path]
+     @param {Boolean} [quiet=false] Return `undefined` instead of throwing an exception if `path` can't be found?
+     @returns {Object} Value at the specified `path` or `undefined`
      */
-    retrieve: function(path) {
-      return this._retrieve(this.deserializePath(path));
+    retrieve: function(path, quiet) {
+      return this._retrieve(this.deserializePath(path), quiet);
     },
 
     /**
@@ -336,12 +350,13 @@ define('orbit/document', ['exports', 'orbit/lib/objects', 'orbit/lib/diffs', 'or
      Throws `PathNotFoundException` if the path does not exist in the document.
 
      @method test
-     @param {Array or String} path
-     @param {Object} value Expected value to test
+     @param {Array or String} [path]
+     @param {Object} [value] Expected value to test
+     @param {Boolean} [quiet=false] Use `undefined` instead of throwing an exception if `path` can't be found?
      @returns {Boolean} Does the value at `path` equal `value`?
      */
-    test: function(path, value) {
-      return eq.eq(this._retrieve(this.deserializePath(path)), value);
+    test: function(path, value, quiet) {
+      return eq.eq(this._retrieve(this.deserializePath(path), quiet), value);
     },
 
     /**
@@ -413,11 +428,15 @@ define('orbit/document', ['exports', 'orbit/lib/objects', 'orbit/lib/diffs', 'or
     // Internals
     /////////////////////////////////////////////////////////////////////////////
 
-    _pathNotFound: function(path) {
-      throw new exceptions.PathNotFoundException(this.serializePath(path));
+    _pathNotFound: function(path, quiet) {
+      if (quiet) {
+        return undefined;
+      } else {
+        throw new exceptions.PathNotFoundException(this.serializePath(path));
+      }
     },
 
-    _retrieve: function(path) {
+    _retrieve: function(path, quiet) {
       var ptr = this._data,
           segment;
       if (path) {
@@ -433,7 +452,7 @@ define('orbit/document', ['exports', 'orbit/lib/objects', 'orbit/lib/diffs', 'or
             ptr = ptr[segment];
           }
           if (ptr === undefined) {
-            this._pathNotFound(path);
+            return this._pathNotFound(path, quiet);
           }
         }
       }
@@ -580,17 +599,12 @@ define('orbit/document', ['exports', 'orbit/lib/objects', 'orbit/lib/diffs', 'or
               this._pathNotFound(path);
             }
 
-          } else if (grandparent[parentKey] === undefined) {
-            this._pathNotFound(path);
-
           } else {
             if (invert) {
               inverse = [{op: 'replace', path: this.serializePath(path), value: objects.clone(grandparent[parentKey])}];
             }
             grandparent[parentKey] = value;
           }
-        } else if (this._data[parentKey] === undefined) {
-          this._pathNotFound(path);
 
         } else {
           if (invert) {
@@ -959,6 +973,30 @@ define('orbit/lib/config', ['exports'], function (exports) {
   exports.arrayToOptions = arrayToOptions;
 
 });
+define('orbit/lib/deprecate', ['exports'], function (exports) {
+
+  'use strict';
+
+  /**
+   Display a deprecation warning with the provided message.
+
+   @method deprecate
+   @for Orbit
+   @param {String} message Description of the deprecation
+   @param {Boolean} test An optional boolean. If false, the deprecation will be displayed.
+   */
+  var deprecate = function(message, test) {
+    if (typeof test === 'function') {
+      if (test()) return;
+    } else {
+      if (test) return;
+    }
+    console.warn(message);
+  };
+
+  exports.deprecate = deprecate;
+
+});
 define('orbit/lib/diffs', ['exports', 'orbit/lib/eq', 'orbit/lib/objects', 'orbit/lib/config'], function (exports, eq, objects, config) {
 
   'use strict';
@@ -1026,6 +1064,10 @@ define('orbit/lib/diffs', ['exports', 'orbit/lib/eq', 'orbit/lib/objects', 'orbi
                 bi++;
               }
             }
+          } else if (a instanceof Date) {
+            if (a.getTime() === b.getTime()) return;
+            if (d === undefined) d = [];
+            d.push({op: 'replace', path: basePath, value: objects.clone(b)});
 
           } else { // general (non-array) object
             for (i in b) {
@@ -1148,7 +1190,19 @@ define('orbit/lib/exceptions', ['exports', 'orbit/lib/objects'], function (expor
 
   'use strict';
 
-  var Exception = objects.Class.extend();
+  var Exception = objects.Class.extend({
+    init: function(message) {
+      this.message = message;
+      this.error = new Error(this.toString());
+      this.stack = this.error.stack;
+    },
+
+    name: 'Orbit.Exception',
+
+    toString: function() {
+      return this.name + ': ' + this.message;
+    },
+  });
 
   /**
    Exception thrown when a path in a document can not be found.
@@ -1161,11 +1215,73 @@ define('orbit/lib/exceptions', ['exports', 'orbit/lib/objects'], function (expor
   var PathNotFoundException = Exception.extend({
     init: function(path) {
       this.path = path;
-    }
+      this._super(path.join('/'));
+    },
+
+    name: 'Orbit.PathNotFoundException',
   });
 
   exports.Exception = Exception;
   exports.PathNotFoundException = PathNotFoundException;
+
+});
+define('orbit/lib/functions', ['exports'], function (exports) {
+
+  'use strict';
+
+  /**
+   Wraps a function that expects parameters with another that can accept the parameters as an array
+
+   @method spread
+   @for Orbit
+   @param {Object} func
+   @returns {function}
+   */
+  var spread = function(func) {
+    return function(args) {
+      func.apply(null, args);
+    };
+  };
+
+  var now = Date.now || function() {
+    return new Date().getTime();
+  };
+
+  var debounce = function(func, wait, immediate) {
+    var timeout, args, context, timestamp, result;
+
+    var later = function() {
+      var last = now() - timestamp;
+
+      if (last < wait && last >= 0) {
+        timeout = setTimeout(later, wait - last);
+      } else {
+        timeout = null;
+        if (!immediate) {
+          result = func.apply(context, args);
+          if (!timeout) context = args = null;
+        }
+      }
+    };
+
+    return function() {
+      context = this;
+      args = arguments;
+      timestamp = now();
+      var callNow = immediate && !timeout;
+      if (!timeout) timeout = setTimeout(later, wait);
+      if (callNow) {
+        result = func.apply(context, args);
+        context = args = null;
+      }
+
+      return result;
+    };
+  };
+
+  exports.spread = spread;
+  exports.now = now;
+  exports.debounce = debounce;
 
 });
 define('orbit/lib/objects', ['exports', 'orbit/lib/eq'], function (exports, eq) {
@@ -1395,7 +1511,7 @@ define('orbit/lib/objects', ['exports', 'orbit/lib/eq'], function (exports, eq) 
    ```
 
    @class Class
-   @for Orbit
+   @namespace Orbit
    */
   var Class = defineClass(null, {
     init: function() {}
@@ -1411,6 +1527,22 @@ define('orbit/lib/objects', ['exports', 'orbit/lib/eq'], function (exports, eq) 
    */
   var isArray = function(obj) {
     return Object.prototype.toString.call(obj) === '[object Array]';
+  };
+
+  /**
+   Converts an object to an `Array` if it's not already.
+
+   @method toArray
+   @for Orbit
+   @param {Object} obj
+   @returns {Array}
+   */
+  var toArray = function(obj) {
+    if (isNone(obj)) {
+      return [];
+    } else {
+      return isArray(obj) ? obj : [ obj ];
+    }
   };
 
   /**
@@ -1437,6 +1569,29 @@ define('orbit/lib/objects', ['exports', 'orbit/lib/eq'], function (exports, eq) 
     return obj === undefined || obj === null;
   };
 
+  /**
+   Combines two objects values
+
+   @method merge
+   @for Orbit
+   @param {Object} base
+   @param {Object} source
+   @returns {Object}
+   */
+  var merge =  function(base, source) {
+    var merged = clone(base);
+    if (source) {
+      Object.keys(source).forEach(function(field) {
+        if (source.hasOwnProperty(field)) {
+          var fieldDef = source[field];
+          merged[field] = fieldDef;
+        }
+      });
+    }
+
+    return merged;
+  };
+
   exports.Class = Class;
   exports.clone = clone;
   exports.defineClass = defineClass;
@@ -1444,8 +1599,232 @@ define('orbit/lib/objects', ['exports', 'orbit/lib/eq'], function (exports, eq) 
   exports.extend = extend;
   exports.extendClass = extendClass;
   exports.isArray = isArray;
+  exports.toArray = toArray;
   exports.isObject = isObject;
   exports.isNone = isNone;
+  exports.merge = merge;
+
+});
+define('orbit/lib/operations', ['exports', 'orbit/lib/objects', 'orbit/lib/eq', 'orbit/document', 'orbit/operation'], function (exports, objects, eq, Document, Operation) {
+
+  'use strict';
+
+  exports.coalesceOperations = coalesceOperations;
+  exports.normalizeOperation = normalizeOperation;
+  exports.normalizeOperations = normalizeOperations;
+
+  function _shouldMerge(supercededOp, supercedingOp, consecutiveOps) {
+    var pathsOverlap = (
+      supercededOp.path.join("/").indexOf(supercedingOp.path.join("/")) === 0 ||
+      supercedingOp.path.join("/").indexOf(supercededOp.path.join("/")) === 0
+    );
+
+    // In order to allow merging of operations, their paths must overlap
+    // and the operations must either be consecutive or the superceding
+    // operation must only change a field (not a relationship).
+    return pathsOverlap &&
+           (consecutiveOps || _valueTypeForPath(supercedingOp.path) === 'field');
+  }
+
+  function _valueTypeForPath(path) {
+    if (path[2] === '__rel') return 'link';
+    if (path.length === 2) return 'record';
+    return 'field';
+  }
+
+  function _linkTypeFor(path) {
+    return path.length === 4 ? 'hasOne' : 'hasMany';
+  }
+
+  function _mergeAttributeWithRecord(superceded, superceding) {
+    var record = superceded.value;
+    var fieldName = superceding.path[2];
+    record[fieldName] = superceding.value;
+    return new Operation['default']({ op: 'add', path: superceded.path, value: record });
+  }
+
+  function _mergeRecordWithAttribute(superceded, superceding) {
+    var record = superceding.value,
+        recordPath = superceding.path;
+    var fieldName = superceded.path[2];
+    record[fieldName] = record[fieldName] || superceded.value;
+    return new Operation['default']({ op: 'add', path: recordPath, value: record });
+  }
+
+  function _mergeLinkWithRecord(superceded, superceding) {
+    var record = superceded.value;
+    var linkName = superceding.path[3];
+    var linkId = superceding.path[4];
+    var linkType = _linkTypeFor(superceding.path);
+
+    record.__rel = record.__rel || {};
+
+    if (linkType === 'hasMany') {
+      record.__rel[linkName] = record.__rel[linkName] || {};
+      record.__rel[linkName][linkId] = true;
+
+    }
+    else if (linkType === 'hasOne') {
+      record.__rel[linkName] = superceding.value;
+
+    }
+    else {
+      throw new Error("linkType not supported: " + linkType);
+    }
+
+    return new Operation['default']({ op: 'add', path: superceded.path, value: record });
+  }
+
+  function _mergeRecordWithLink(superceded, superceding) {
+    var record = superceding.value;
+    var linkName = superceded.path[3];
+    var linkId = superceded.path[4];
+    var linkType = _linkTypeFor(superceded.path);
+
+    record.__rel = record.__rel || {};
+
+    if (linkType === 'hasMany') {
+      record.__rel[linkName] = record.__rel[linkName] || {};
+      record.__rel[linkName][linkId] = true;
+
+    }
+    else if (linkType === 'hasOne') {
+      record.__rel[linkName] = record.__rel[linkName] || superceded.value;
+
+    }
+    else {
+      throw new Error("linkType not supported: " + linkType);
+    }
+
+    return new Operation['default']({ op: 'add', path: superceding.path, value: record });
+  }
+
+  function _valueTypeForLinkValue(value) {
+    if (!value) return 'unknown';
+    if (objects.isObject(value)) return 'hasMany';
+    return 'hasOne';
+  }
+
+  function _mergeRecords(target, source) {
+    Object.keys(source).forEach( function(attribute) {
+      var attributeValue = source[attribute];
+      if (attribute !== '__rel') {
+        target[attribute] = attributeValue;
+      }
+    });
+
+    source.__rel = source.__rel || {};
+    target.__rel = target.__rel || {};
+
+    var sourceLinks = Object.keys(source.__rel);
+    var targetLinks = Object.keys(target.__rel);
+    var links = sourceLinks.concat(targetLinks);
+
+    links.forEach( function(link) {
+      var linkType = _valueTypeForLinkValue(source.__rel[link] || target.__rel[link]);
+
+      if (linkType === 'hasOne') {
+        target.__rel[link] = source.__rel[link];
+      } else if (linkType === 'unknown') {
+        target.__rel[link] = null;
+      } else {
+        target.__rel[link] = target.__rel[link] || {};
+        target.__rel[link] = objects.merge(target.__rel[link], source.__rel[link]);
+      }
+    });
+
+    return target;
+  }
+
+  function _mergeRecordWithRecord(superceded, superceding) {
+    var mergedRecord = { id: superceded.id, __rel: {} },
+        supercededRecord = superceded.value,
+        supercedingRecord = superceding.value,
+        record;
+
+    record = _mergeRecords({}, supercededRecord);
+    record = _mergeRecords(record, supercedingRecord);
+
+    return new Operation['default']({ op: 'add', path: superceding.path, value: record });
+  }
+
+  function _merge(superceded, superceding) {
+    var supercedingType = _valueTypeForPath(superceding.path),
+        supercededType = _valueTypeForPath(superceded.path);
+
+    if (supercededType === 'record' && supercedingType === 'field') {
+      return _mergeAttributeWithRecord(superceded, superceding);
+    }
+    else if (supercededType === 'field' && supercedingType === 'record') {
+      return _mergeRecordWithAttribute(superceded, superceding);
+    }
+    else if (supercededType === 'record' && supercedingType === 'link') {
+      return _mergeLinkWithRecord(superceded, superceding);
+    }
+    else if (supercededType === 'link' && supercedingType === 'record') {
+      return _mergeRecordWithLink(superceded, superceding);
+    }
+    else if (supercededType === 'record' && supercedingType === 'record') {
+      return _mergeRecordWithRecord(superceded, superceding);
+    }
+    else {
+      return superceding;
+    }
+  }
+
+  /**
+   Coalesces operations into a minimal set of equivalent operations.
+
+   This method respects the order of the operations array and does not allow
+   reordering of operations that affect relationships.
+
+   @method coalesceOperations
+   @for Orbit
+   @param {Array} operations
+   @returns {Array}
+   */
+  function coalesceOperations(operations) {
+    var coalescedOps = [];
+    var currentOp;
+    var nextOp;
+    var consecutiveOps;
+
+    for (var i = 0, l = operations.length; i < l; i++) {
+      currentOp = operations[i];
+
+      if (currentOp) {
+        consecutiveOps = true;
+
+        for (var j = i + 1; j < l; j++) {
+          nextOp = operations[j];
+          if (nextOp) {
+            if (_shouldMerge(currentOp, nextOp, consecutiveOps)) {
+              currentOp = _merge(currentOp, nextOp);
+              operations[j] = undefined;
+            } else {
+              consecutiveOps = false;
+            }
+          }
+        }
+
+        coalescedOps.push(currentOp);
+      }
+    }
+
+    return coalescedOps;
+  }
+
+  function normalizeOperation(operation) {
+    if (operation instanceof Operation['default']) {
+      return operation;
+    } else {
+      return new Operation['default'](operation);
+    }
+  }
+
+  function normalizeOperations(operations) {
+    return operations.map(normalizeOperation);
+  }
 
 });
 define('orbit/lib/strings', ['exports'], function (exports) {
@@ -1453,8 +1832,7 @@ define('orbit/lib/strings', ['exports'], function (exports) {
   'use strict';
 
   /**
-   Uppercase the first letter of a string. The remainder of the string won't
-   be affected.
+   Uppercase the first letter of a string, but don't change the remainder.
 
    @method capitalize
    @for Orbit
@@ -1465,7 +1843,70 @@ define('orbit/lib/strings', ['exports'], function (exports) {
     return str.charAt(0).toUpperCase() + str.slice(1);
   };
 
+  /**
+   Convert underscored, dasherized, or space-delimited words into lowerCamelCase.
+
+   @method camelize
+   @for Orbit
+   @param {String} str
+   @returns {String} camelized string
+   */
+  var camelize = function(str) {
+    return str
+      .replace(/(\-|\_|\.|\s)+(.)?/g, function(match, separator, chr) {
+        return chr ? chr.toUpperCase() : '';
+      })
+      .replace(/(^|\/)([A-Z])/g, function(match, separator, chr) {
+        return match.toLowerCase();
+      });
+  };
+
+  /**
+   Converts a camelized string into all lowercase separated by underscores.
+
+   @method decamelize
+   @for Orbit
+   @param {String} str
+   @returns {String} lower case, underscored string
+   */
+  var decamelize = function(str) {
+    return str
+      .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+      .toLowerCase();
+  };
+
+  /**
+   Dasherize words that are underscored, space-delimited, or camelCased.
+
+   @method dasherize
+   @for Orbit
+   @param {String} str
+   @returns {String} dasherized string
+   */
+  var dasherize = function(str) {
+    return decamelize(str).replace(/[ _]/g, '-');
+  };
+
+  /**
+   Underscore words that are dasherized, space-delimited, or camelCased.
+
+   @method underscore
+   @for Orbit
+   @param {String} str
+   @returns {String} underscored string
+   */
+  var underscore = function(str) {
+    return str
+      .replace(/([a-z\d])([A-Z]+)/g, '$1_$2')
+      .replace(/\-|\s+/g, '_')
+      .toLowerCase();
+  };
+
   exports.capitalize = capitalize;
+  exports.camelize = camelize;
+  exports.decamelize = decamelize;
+  exports.dasherize = dasherize;
+  exports.underscore = underscore;
 
 });
 define('orbit/lib/stubs', ['exports'], function (exports) {
@@ -1641,7 +2082,7 @@ define('orbit/notifier', ['exports', 'orbit/lib/objects'], function (exports, ob
   exports['default'] = Notifier;
 
 });
-define('orbit/operation', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid'], function (exports, objects, uuid) {
+define('orbit/operation', ['exports', 'orbit/lib/objects'], function (exports, objects) {
 
   'use strict';
 
@@ -1654,70 +2095,41 @@ define('orbit/operation', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid'], fu
 
    Operations maintain the standard Patch attributes: `op`, `path`, and `value`.
 
-   Operations are automatically assigned a UUID `id`. They can maintain their
-   ancestry in a `log`. In this way, it is possible to determine whether
-   operations preceded each other.
-
-   Operations can `spawn` descendants, which automatically adds the parent to
-   the child's history.
-
    @class Operation
    @namespace Orbit
    @param {Object}    [options]
    @param {String}    [options.op] Patch attribute `op`
    @param {String}    [options.path] Patch attribute `path`
    @param {Object}    [options.value] Patch attribute `value`
-   @param {Operation} [options.parent] parent operation that spawned this one
    @constructor
    */
-  var Operation = objects.Class.extend({
+  exports['default'] = objects.Class.extend({
     op: null,
     path: null,
     value: null,
-    log: null,
 
     init: function(options) {
       options = options || {};
 
       var path = options.path;
-      if (typeof path === 'string') path = path.split('/');
+      if (typeof path === 'string') {
+        if (path.indexOf('/') === 0) {
+          path = path.substr(1);
+        }
+        if (path.length === 0) {
+          path = [];
+        } else {
+          path = path.split('/');
+        }
+      }
 
       this.op = options.op;
       this.path = path;
       if (includeValue(this)) {
         this.value = options.value;
-      }
-
-      this.id = options.id || uuid.uuid();
-
-      if (options.parent) {
-        this.log = options.parent.log.concat(options.parent.id);
       } else {
-        this.log = options.log || [];
+        this.value = undefined;
       }
-    },
-
-    descendedFrom: function(operation) {
-      return this.log.indexOf(operation.id || operation) > -1;
-    },
-
-    relatedTo: function(operation) {
-      if (operation instanceof Operation) {
-        return (operation.descendedFrom(this.log[0] || this.id) ||
-                this.descendedFrom(operation.log[0] || operation.id) ||
-                this.id === operation.id);
-      } else {
-        return this.descendedFrom(operation) || this.id === operation;
-      }
-    },
-
-    spawn: function(data) {
-      return new Operation({
-        op: data.op,
-        path: data.path,
-        value: data.value,
-        parent: this
-      });
     },
 
     serialize: function() {
@@ -1733,8 +2145,6 @@ define('orbit/operation', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid'], fu
       return serialized;
     }
   });
-
-  exports['default'] = Operation;
 
 });
 define('orbit/request-connector', ['exports', 'orbit/requestable', 'orbit/lib/assert', 'orbit/lib/config', 'orbit/lib/objects', 'orbit/lib/strings'], function (exports, Requestable, assert, config, objects, strings) {
@@ -1893,58 +2303,7 @@ define('orbit/requestable', ['exports', 'orbit/evented', 'orbit/lib/assert', 'or
   exports['default'] = Requestable;
 
 });
-define('orbit/transaction', ['exports', 'orbit/lib/objects'], function (exports, objects) {
-
-  'use strict';
-
-  var Transaction = objects.Class.extend({
-    init: function(source, options) {
-      this.source = source;
-
-      options = options || {};
-      var active = options.active !== undefined ? options.active : true;
-      if (active) this.begin();
-    },
-
-    begin: function() {
-      this.ops = [];
-      this.inverseOps = [];
-      this._activate();
-    },
-
-    commit: function() {
-      this._deactivate();
-    },
-
-    rollback: function() {
-      this._deactivate();
-      return this.source.transform(this.inverseOps);
-    },
-
-    /////////////////////////////////////////////////////////////////////////////
-    // Internals
-    /////////////////////////////////////////////////////////////////////////////
-
-    _activate: function() {
-      this.source.on('didTransform', this._processTransform, this);
-      this.active = true;
-    },
-
-    _deactivate: function() {
-      this.source.off('didTransform', this._processTransform, this);
-      this.active = false;
-    },
-
-    _processTransform: function(op, inverseOps) {
-      this.ops.push(op);
-      this.inverseOps.push.apply(this.inverseOps, inverseOps);
-    }
-  });
-
-  exports['default'] = Transaction;
-
-});
-define('orbit/transform-connector', ['exports', 'orbit/lib/objects', 'orbit/lib/diffs', 'orbit/lib/eq', 'orbit/lib/config'], function (exports, objects, diffs, eq, config) {
+define('orbit/transform-connector', ['exports', 'orbit/lib/assert', 'orbit/lib/objects'], function (exports, assert, objects) {
 
   'use strict';
 
@@ -1982,210 +2341,204 @@ define('orbit/transform-connector', ['exports', 'orbit/lib/objects', 'orbit/lib/
       return this._active;
     },
 
-    transform: function(operation) {
-      // console.log('****', ' transform from ', this.source.id, ' to ', this.target.id, operation);
+    transform: function(transform) {
+      // console.log('****', ' transform from ', this.source.id, ' to ', this.target.id, transform);
 
-      var _this = this;
-
-      // If the target is currently processing a transformation and this
-      // operation does not belong to that transformation, then wait for the
-      // transformation to complete before applying this operation.
-      //
-      // This will be called recursively to process multiple transformations if
-      // necessary.
-      var currentTransformation = this.target.currentTransformation();
-      if (currentTransformation && !currentTransformation.verifyOperation(operation)) {
-        // console.log('>>>> TransformConnector#transform - waiting', this.source.id, this.target.id, operation);
-        return currentTransformation.process().then(function() {
-          // console.log('<<<< TransformConnector#transform - done waiting', _this.source.id, _this.target.id, operation);
-          return _this.transform(operation);
-        });
-      }
-
-      if (this.target.retrieve) {
-        var currentValue = this.target.retrieve(operation.path);
-
-        // console.log('currentValue', currentValue, ' transform from ', this.source.id, ' to ', this.target.id, operation);
-
-        if (objects.isNone(currentValue)) {
-          // Removing a null value, or replacing it with another null value, is unnecessary
-          if ((operation.op === 'remove') ||
-              (operation.op === 'replace' && objects.isNone(operation.value))) {
-            return;
-          }
-
-        } else if (operation.op === 'add' || operation.op === 'replace') {
-          if (eq.eq(currentValue, operation.value)) {
-            // Replacing a value with its equivalent is unnecessary
-            return;
-
-          } else {
-            return this.resolveConflicts(operation.path, currentValue, operation.value, operation);
-          }
-        }
-      }
-
-      return this.target.transform(operation);
-    },
-
-    resolveConflicts: function(path, currentValue, updatedValue, operation) {
-      var ops = diffs.diffs(currentValue, updatedValue, {basePath: path, ignore: ['__rev']});
-
-      if (ops) {
-        var spawnedOps = ops.map(function(op) {
-          return operation.spawn(op);
-        });
-
-        // console.log(this.target.id, 'resolveConflicts', path, currentValue, updatedValue, spawnedOps);
-
-        return this.target.transform(spawnedOps);
-      }
+      return this.target.transform(transform);
     },
 
     /**
-     @method filterFunction
-     @param {Object} operation
-     @return {Boolean} `true` if the operation should be processed
+     @method shouldTransform
+     @param {Transform} [transform] transform applied to the source
+     @return {Boolean} `true` if the transform should be applied to the target
      */
-    filterFunction: null,
+    shouldTransform: null,
 
     /////////////////////////////////////////////////////////////////////////////
     // Internals
     /////////////////////////////////////////////////////////////////////////////
 
-    _processTransform: function(operation, inverseOps) {
-      // console.log('****', ' processTransform from ', this.source.id, ' to ', this.target.id, operation);
+    _processTransform: function(transform) {
+      // console.log('****', ' processTransform from ', this.source.id, ' to ', this.target.id, transform);
 
-      if (this.filterFunction) {
-        if (!this.filterFunction(operation)) return;
+      // if (result.operations.length === 0) return;
+
+      if (this.shouldTransform) {
+        if (!this.shouldTransform(transform)) return;
       }
 
-      if (this.blocking) {
-        return this.transform(operation);
+      var promise = this.transform(transform);
 
-      } else {
-        this.transform(operation);
-      }
+      if (this.blocking) return promise;
     }
   });
 
   exports['default'] = TransformConnector;
 
 });
-define('orbit/transformable', ['exports', 'orbit/main', 'orbit/evented', 'orbit/action-queue', 'orbit/transformation', 'orbit/operation', 'orbit/lib/objects', 'orbit/lib/assert'], function (exports, Orbit, Evented, ActionQueue, Transformation, Operation, objects, assert) {
+define('orbit/transform-result', ['exports', 'orbit/lib/objects', 'orbit/lib/uuid'], function (exports, objects, uuid) {
 
   'use strict';
 
-  function normalize(operation) {
-    if (objects.isArray(operation)) {
-      return operation.map(function(o) {
-        return normalize(o);
-      });
+  exports['default'] = objects.Class.extend({
+    operations: null,
+    inverseOperations: null,
 
-    } else {
-      if (operation instanceof Operation['default']) {
-        return operation;
-      } else {
-        return new Operation['default'](operation);
-      }
+    init: function(operations, inverseOperations) {
+      this.operations = objects.toArray(operations);
+      this.inverseOperations = objects.toArray(inverseOperations);
+    },
+
+    push: function(operations, inverseOperations) {
+      Array.prototype.push.apply(this.operations, objects.toArray(operations));
+      Array.prototype.push.apply(this.inverseOperations, objects.toArray(inverseOperations));
+    },
+
+    concat: function(result) {
+      this.push(result.operations, result.inverseOperations);
+    },
+
+    isEmpty: function() {
+      return this.operations.length === 0 &&
+             this.inverseOperations.length === 0;
     }
-  }
+  });
 
-  function transformationFor(operation) {
-    var transformation;
-    var i;
+});
+define('orbit/transform', ['exports', 'orbit/lib/objects', 'orbit/lib/operations', 'orbit/lib/uuid'], function (exports, objects, operations, uuid) {
 
-    if (objects.isArray(operation)) {
-      for (i = 0; i < operation.length; i++) {
-        var t = transformationFor.call(this, operation[i]);
-        if (transformation) {
-          if (t !== transformation) return;
-        } else {
-          transformation = t;
-        }
-      }
-      return transformation;
+  'use strict';
 
-    } else {
-      var queue = this._transformationQueue.content;
+  var Transform = objects.Class.extend({
+    operations: null,
 
-      // console.log('transformationFor', operation, queue.length);
+    init: function(ops, options) {
+      this.operations = operations.normalizeOperations( objects.toArray(ops) );
 
-      for (i = 0; i < queue.length; i++) {
-        transformation = queue[i].data;
-        if (transformation.verifyOperation(operation)) {
-          return transformation;
-        }
-      }
+      options = options || {};
+
+      this.id = options.id || uuid.uuid();
+    },
+
+    isEmpty: function() {
+      return this.operations.length === 0;
     }
-  }
+  });
 
-  function queueTransformation(transformation) {
+  exports['default'] = Transform;
+
+});
+define('orbit/transformable', ['exports', 'orbit/main', 'orbit/evented', 'orbit/action-queue', 'orbit/transform', 'orbit/transform-result', 'orbit/lib/assert', 'orbit/lib/deprecate'], function (exports, Orbit, Evented, ActionQueue, Transform, TransformResult, assert, deprecate) {
+
+  'use strict';
+
+  function settleTransform(transform, result) {
     var _this = this;
 
-    var processor = this._transformationQueue.push({
-      data: transformation,
+    this._transformLog[transform.id] = true;
+
+    return this.settle.call(this, 'didTransform', transform, result);
+  }
+
+  function processTransform(transform) {
+    // console.log('processTransform', this.id, transform);
+
+    var _this = this;
+    var ops = transform.operations;
+    var result;
+
+    if (this.prepareTransformOperations) {
+      ops = this.prepareTransformOperations(ops);
+    }
+
+    if (ops.length > 0) {
+      var response = this._transform(ops);
+
+      if (response) {
+        if (response.then) {
+          return response.then(function(result) {
+            return settleTransform.call(_this, transform, result);
+          });
+        } else if (response instanceof TransformResult['default']) {
+          result = response;
+        }
+      }
+    }
+
+    if (!result) result = new TransformResult['default']();
+
+    return settleTransform.call(this, transform, result);
+  }
+
+  function queueTransform(transform) {
+    var _this = this;
+
+    var action = this._transformQueue.push({
+      data: transform,
       process: function() {
-        return transformation.process();
+        return processTransform.call(_this, transform);
       }
     });
 
-    return processor;
+    return action.complete;
+  }
+
+  function queueTransformResult(transform, result) {
+    var _this = this;
+
+    var action = this._transformQueue.push({
+      data: transform,
+      process: function() {
+        return settleTransform.call(_this, transform, result);
+      }
+    });
+
+    return action.complete;
   }
 
   var Transformable = {
     extend: function(object, actions) {
       if (object._transformable === undefined) {
         object._transformable = true;
-        object._transformationQueue = new ActionQueue['default']();
+        object._transformQueue = new ActionQueue['default']();
+        object._transformLog = {};
 
         Evented['default'].extend(object);
 
-        object.didTransform = function(operation, inverse) {
-          var normalized = normalize(operation);
-          var transformation = transformationFor.call(this, normalized);
-          if (transformation) {
-            // console.log('Transformable#didTransform - matching transformation found', this.id, normalized, inverse);
-            transformation.pushCompletedOperation(normalized, inverse);
-
-          } else {
-            // console.log('Transformable#didTransform - createTransformation', this.id, normalized, inverse);
-            transformation = new Transformation['default'](this);
-            transformation.pushCompletedOperation(normalized, inverse);
-            queueTransformation.call(this, transformation);
-          }
+        object.didTransform = function() {
+          deprecate.deprecate('`didTransform` has been deprecated. Please call `transformed` instead and supply a TransformResult as an argument.', true);
         };
 
-        object.currentTransformation = function() {
-          if (this._transformationQueue.current) return this._transformationQueue.current.data;
+        object.transformed = function(result) {
+          assert.assert('Call `transformed` with an instanceof a TransformResult.', result instanceof TransformResult['default']);
+
+          var transform = new Transform['default'](result.operations);
+
+          // console.log('transformed - queued', this.id, transform, result);
+          return queueTransformResult.call(this, transform, result);
         };
 
-        object.transform = function(operation) {
-          var normalized = normalize(operation);
-          var transformation = transformationFor.call(this, normalized);
-          var action;
-
-          if (transformation) {
-            // console.log('transform - matching transformation found', this.id, normalized);
-            action = transformation.pushOperation(normalized);
-
-            if (objects.isArray(action)) {
-              return action[action.length - 1].complete;
-            } else {
-              return action.complete;
-            }
+        object.transform = function(transform) {
+          if (transform instanceof Transform['default']) {
+            // Do not reapply transforms that have been applied
+            if (object._transformLog[transform.id]) return;
 
           } else {
-            // console.log('transform - createTransformation', this.id, normalized);
-            transformation = new Transformation['default'](this);
-            action = transformation.pushOperation(normalized);
-            var transformationProcessor = queueTransformation.call(this, transformation);
-            return transformationProcessor.complete;
+            // If a transform was not passed in, create a new one from the
+            // arguments
+            transform = new Transform['default'](transform);
           }
+
+          // console.log('transform - queued', this.id, transform);
+          return queueTransform.call(this, transform);
         };
 
         object.settleTransforms = function() {
-          return this._transformationQueue.process();
+          return this._transformQueue.process();
+        };
+
+        object.clearTransformLog = function() {
+          this._transformLog = {};
         };
       }
 
@@ -2194,181 +2547,5 @@ define('orbit/transformable', ['exports', 'orbit/main', 'orbit/evented', 'orbit/
   };
 
   exports['default'] = Transformable;
-
-});
-define('orbit/transformation', ['exports', 'orbit/main', 'orbit/lib/objects', 'orbit/action-queue', 'orbit/evented', 'orbit/operation', 'orbit/lib/assert'], function (exports, Orbit, objects, ActionQueue, Evented, Operation, assert) {
-
-  'use strict';
-
-  exports['default'] = objects.Class.extend({
-    target: null,
-
-    queue: null,
-
-    originalOperations: null,
-
-    completedOperations: null,
-
-    inverseOperations: null,
-
-    init: function(target) {
-      var _this = this;
-
-      assert.assert('_transform must be defined', target._transform);
-
-      Evented['default'].extend(this);
-
-      this.target = target;
-      this.queue = new ActionQueue['default']({autoProcess: false});
-      this.completedOperations = [];
-      this.originalOperations = [];
-      this.inverseOperations = [];
-    },
-
-    verifyOperation: function(operation) {
-      var original;
-      for (var i = 0; i < this.originalOperations.length; i++) {
-        original = this.originalOperations[i];
-        if (operation.relatedTo(original)) {
-          // console.log('Transformation#verifyOperation - TRUE', this.target.id, operation);
-          return true;
-        }
-      }
-      // console.log('Transformation#verifyOperation - FALSE', this.target.id, operation);
-      return false;
-    },
-
-    pushOperation: function(operation) {
-      var _this = this;
-
-      if (objects.isArray(operation)) {
-        if (_this.originalOperations.length === 0) {
-          operation.forEach(function(o) {
-            _this.originalOperations.push(o);
-          });
-        }
-
-        return operation.map(function(o) {
-          return _this.pushOperation(o);
-        });
-
-      } else {
-        assert.assert('operation must be an `Operation`', operation instanceof Operation['default']);
-
-        // console.log('Transformation#push - queued', _this.target.id, operation);
-
-        if (_this.originalOperations.length === 0) {
-          _this.originalOperations.push(operation);
-        }
-
-        if (_this.currentOperation && operation.relatedTo(_this.currentOperation)) {
-          // console.log('!!! Transformation spawned from current op');
-
-          return _this._transform(operation);
-
-        } else {
-          return this.queue.push({
-            id: operation.id,
-            data: operation,
-            process: function() {
-              _this.currentOperation = this.data;
-              return _this._transform(this.data).then(function() {
-                _this.currentOperation = null;
-              });
-            }
-          });
-        }
-      }
-    },
-
-    pushCompletedOperation: function(operation, inverse) {
-      assert.assert('completed operation must be an `Operation`', operation instanceof Operation['default']);
-
-      if (this.originalOperations.length === 0) {
-        this.originalOperations.push(operation);
-      }
-
-      this.inverseOperations = this.inverseOperations.concat(inverse);
-      this.completedOperations.push([operation, inverse]);
-    },
-
-    process: function() {
-      var _this = this;
-      var processing = this.processing;
-
-      // console.log('Transformation#process', _this.target.id, this.queue.content);
-
-      if (!processing) {
-        processing = this.processing = this.queue.process().then(function() {
-          return _this._settle().then(function() {
-            // console.log('Transformation#process settled', _this.target.id);
-            // _this.emit('didProcess');
-            return _this.inverseOperations;
-          // }, function() {
-            // _this.emit('didNotProcess');
-          });
-        });
-      }
-
-      return processing;
-    },
-
-    _transform: function(operation) {
-      // console.log('Transformation#_transform', this.target.id, operation);
-      var res = this.target._transform(operation);
-      if (res) {
-        var _this = this;
-        return res.then(function(inverse) {
-          // console.log('Transformation#_transform promise resolved - not yet settled', _this.target.id);
-          return _this._settle();
-        });
-
-      } else {
-        return this._settle();
-      }
-    },
-
-    _settle: function() {
-      var _this = this;
-
-      var ops = this.completedOperations;
-
-      // console.log('Transformation#_settle', this.target.id, ops);
-
-      if (!ops || !ops.length) {
-        return new Orbit['default'].Promise(function(resolve) {
-          resolve();
-        });
-      }
-
-      if (this.settlingTransforms) {
-        return this.settlingTransforms;
-      }
-
-      return this.settlingTransforms = new Orbit['default'].Promise(function(resolve) {
-        var settleEach = function() {
-          if (ops.length === 0) {
-            // console.log('Transformation#_settle complete', _this.target.id);
-            _this.settlingTransforms = false;
-            resolve();
-
-          } else {
-            var op = ops.shift();
-
-            // console.log('settle#settleEach', _this.target.id, ops.length + 1, 'didTransform', op[0], op[1]);
-
-            var response = _this.target.settle.call(_this.target, 'didTransform', op[0], op[1]);
-            if (response) {
-              return response.then(settleEach, settleEach);
-            } else {
-              settleEach();
-            }
-          }
-        };
-
-        settleEach();
-      });
-    }
-  });
 
 });//# sourceMappingURL=orbit.amd.map

@@ -1,0 +1,113 @@
+(function() {
+
+// Share loader properties from globalized Orbit package
+var define = window.Orbit.__define__;
+var requireModule = window.Orbit.__requireModule__;
+
+define('orbit-common/local-forage-source', ['exports', 'orbit/main', 'orbit/lib/assert', 'orbit/lib/functions', 'orbit/lib/objects', 'orbit-common/memory-source'], function (exports, Orbit, assert, functions, objects, MemorySource) {
+
+  'use strict';
+
+  var supportsLocalStorage = function() {
+    try {
+      return 'localStorage' in window && window['localStorage'] !== null;
+    } catch(e) {
+      return false;
+    }
+  };
+
+  /**
+   Source for storing data with local forage (https://github.com/mozilla/localForage)
+
+   @class LocalForageSource
+   @extends MemorySource
+   @namespace OC
+   @param {OC.Schema} schema
+   @param {Object}    [options]
+   @constructor
+   */
+  var LocalForageSource = MemorySource['default'].extend({
+    init: function(options) {
+      assert.assert('Your browser does not support local storage!', supportsLocalStorage()); //needed as final fallback
+      assert.assert('No valid local forage object given', options['localforage'] !== undefined);
+      assert.assert('Local forage requires Orbit.Promise be defined', Orbit['default'].Promise);
+
+      var _this = this;
+
+      this._super.apply(this, arguments);
+
+      options = options || {};
+      this.saveDataCallback = options['saveDataCallback'];
+      this.loadDataCallback = options['loadDataCallback'];
+      this.namespace = options['namespace'] || 'orbit'; // local storage key
+      this._autosave = options['autosave'] !== undefined ? options['autosave'] : true;
+      var autoload = options['autoload'] !== undefined ? options['autoload'] : true;
+      this.localforage = options['localforage'];
+
+      this._isDirty = false;
+
+      this.on('didTransform', functions.debounce(function() {
+        var promise = _this._saveData();
+        if (promise) {
+          promise.then(function() {
+            if (options.saveDataCallback) setTimeout(_this.saveDataCallback, 0);
+          });
+        }
+      }, 200), this);
+
+      if (autoload) this.load().then(function() {
+        if (options.loadDataCallback) setTimeout(options.callback, 0);
+      });
+    },
+
+    load: function() {
+      var _this = this;
+      return new Orbit['default'].Promise(function(resolve, reject) {
+        _this.localforage.getItem(_this.namespace).then(function(storage){
+          if (storage) {
+            _this.reset(Orbit['default'].extend(_this.retrieve(), storage));
+          }
+          resolve();
+        });
+      });
+    },
+
+    enableAutosave: function() {
+      if (!this._autosave) {
+        this._autosave = true;
+        if (this._isDirty) this._saveData();
+      }
+    },
+
+    disableAutosave: function() {
+      if (this._autosave) {
+        this._autosave = false;
+      }
+    },
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Internals
+    /////////////////////////////////////////////////////////////////////////////
+
+    _saveData: function(forceSave) {
+      var _this = this; //bind not supported in older browsers
+      if (!this._autosave && !forceSave) {
+        this._isDirty = true;
+        return;
+      }
+      return this.localforage.setItem(this.namespace, this.retrieve()).then(
+        function() {
+          _this._isDirty = false;
+        }
+      );
+
+    }
+  });
+
+  exports['default'] = LocalForageSource;
+
+});
+window.OC.LocalForageSource = requireModule("orbit-common/local-forage-source")["default"];
+
+})();
+//# sourceMappingURL=orbit-common-local-forage.map

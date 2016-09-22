@@ -4,29 +4,37 @@
 var define = window.Orbit.__define__;
 var requireModule = window.Orbit.__requireModule__;
 
-define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer', 'orbit/lib/objects'], function (exports, Serializer, objects) {
+define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer', 'orbit/lib/objects', 'orbit/lib/strings'], function (exports, Serializer, objects, strings) {
 
   'use strict';
 
-  var JSONAPISerializer = Serializer['default'].extend({
+  exports['default'] = Serializer['default'].extend({
     resourceKey: function(type) {
       return 'id';
     },
 
     resourceType: function(type) {
-      return this.schema.pluralize(type);
+      return strings.dasherize( this.schema.pluralize(type) );
     },
 
     resourceLink: function(type, link) {
-      return link;
+      return strings.dasherize( link );
     },
 
     resourceAttr: function(type, attr) {
-      return attr;
+      return strings.dasherize( attr );
     },
 
     typeFromResourceType: function(resourceType) {
-      return this.schema.singularize(resourceType);
+      return strings.camelize( this.schema.singularize(resourceType) );
+    },
+
+    attrFromResourceAttr: function(type, resourceAttr) {
+      return strings.camelize( resourceAttr );
+    },
+
+    linkFromResourceLink: function(type, resourceLink) {
+      return strings.camelize( resourceLink );
     },
 
     resourceId: function(type, id) {
@@ -39,7 +47,7 @@ define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer',
         return ids;
       }
 
-      var primaryKey = this.schema.models[type].primaryKey.name;
+      var primaryKey = this.schema.modelDefinition(type).primaryKey.name;
       var resourceKey = this.resourceKey(type);
 
       if (objects.isObject(id)) {
@@ -57,7 +65,7 @@ define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer',
     },
 
     idFromResourceId: function(type, resourceId) {
-      var primaryKey = this.schema.models[type].primaryKey;
+      var primaryKey = this.schema.modelDefinition(type).primaryKey;
       var pk = primaryKey.name;
       var rk = this.resourceKey(type);
 
@@ -80,13 +88,12 @@ define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer',
     },
 
     serialize: function(type, records) {
-      var json = {},
-          resourceType = this.resourceType(type);
+      var json = {};
 
       if (objects.isArray(records)) {
-        json[resourceType] = this.serializeRecords(type, records);
+        json.data = this.serializeRecords(type, records);
       } else {
-        json[resourceType] = this.serializeRecord(type, records);
+        json.data = this.serializeRecord(type, records);
       }
 
       return json;
@@ -105,81 +112,98 @@ define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer',
     serializeRecord: function(type, record) {
       var json = {};
 
-      this.serializeKeys(type, record, json);
+      this.serializeId(type, record, json);
+      this.serializeType(type, record, json);
       this.serializeAttributes(type, record, json);
       this.serializeLinks(type, record, json);
 
       return json;
     },
 
-    serializeKeys: function(type, record, json) {
-      var modelSchema = this.schema.models[type];
-      var resourceKey = this.resourceKey(type);
-      var value = record[resourceKey];
-
-      if (value) {
-        json[resourceKey] = value;
+    serializeId: function(type, record, json) {
+      var value = this.resourceId(type, record);
+      if (value !== undefined) {
+        json.id = value;
       }
     },
 
-    serializeAttributes: function(type, record, json) {
-      var modelSchema = this.schema.models[type];
+    serializeType: function(type, record, json) {
+      json.type = this.resourceType(type);
+    },
 
-      Object.keys(modelSchema.attributes).forEach(function(attr) {
+    serializeAttributes: function(type, record, json) {
+      var modelDef = this.schema.modelDefinition(type);
+
+      Object.keys(modelDef.attributes).forEach(function(attr) {
         this.serializeAttribute(type, record, attr, json);
       }, this);
     },
 
     serializeAttribute: function(type, record, attr, json) {
-      json[this.resourceAttr(type, attr)] = record[attr];
+      var value = record[attr];
+      if (value !== undefined) {
+        if (json.attributes === undefined) {
+          json.attributes = {};
+        }
+
+        json.attributes[this.resourceAttr(type, attr)] = value;
+      }
     },
 
     serializeLinks: function(type, record, json) {
-      var modelSchema = this.schema.models[type];
-      var linkNames = Object.keys(modelSchema.links);
+      var modelDef = this.schema.modelDefinition(type);
+      var linkNames = Object.keys(modelDef.links);
 
-      if (linkNames.length > 0) {
-        json.links = {};
+      if (linkNames.length > 0 && record.__rel) {
+        json.relationships = {};
 
         linkNames.forEach(function (link) {
-          var linkDef = modelSchema.links[link];
+          var linkDef = modelDef.links[link];
           var value = record.__rel[link];
 
           if (linkDef.type === 'hasMany') {
-            value = Object.keys(value);
+            value = Object.keys(value).map(function(id) {
+              return this.serializeRelationshipIdentifier(linkDef.model, id);
+            }, this);
+          } else if (value) {
+            value = this.serializeRelationshipIdentifier(linkDef.model, value);
+          } else {
+            value = null;
           }
 
-          json.links[link] = value;
+          json.relationships[link] = {
+            data: value
+          };
 
         }, this);
       }
     },
 
+    serializeRelationshipIdentifier: function(type, id) {
+      return {
+        type: this.resourceType(type),
+        id: this.resourceId(type, id)
+      };
+    },
+
     deserialize: function(type, id, data) {
       var records = {};
-      var schema = this.schema;
-      var resourceType = this.resourceType(type);
-      var primaryData = data[resourceType];
 
-      if (objects.isArray(primaryData)) {
-        records[type] = this.deserializeRecords(type, id, primaryData);
+      if (objects.isArray(data.data)) {
+        records.primary = this.deserializeRecords(type, id, data.data);
       } else {
-        records[type] = this.deserializeRecord(type, id, primaryData);
+        records.primary = this.deserializeRecord(type, id, data.data);
       }
 
-      var linkedData = data.linked;
+      if (data.included) {
+        records.included = {};
 
-      if (linkedData) {
-        var relType;
-        var relKey;
-        var relData;
-
-        records.linked = {};
-
-        Object.keys(linkedData).forEach(function(linkedResourceType) {
-          relType = this.typeFromResourceType(linkedResourceType);
-          relData = linkedData[linkedResourceType];
-          records.linked[relType] = this.deserializeRecords(relType, null, relData);
+        data.included.forEach(function(recordData) {
+          var recordType = this.typeFromResourceType(recordData.type);
+          if (records.included[recordType] === undefined) {
+            records.included[recordType] = [];
+          }
+          records.included[recordType].push(this.deserializeRecord(recordType, null, recordData));
         }, this);
       }
 
@@ -188,113 +212,158 @@ define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer',
       return records;
     },
 
-    deserializeLink: function(type, data) {
-      var resourceType = this.resourceType(type);
-      return data[resourceType];
+    deserializeLink: function(data) {
+      if (objects.isObject(data)) {
+        if (objects.isArray(data)) {
+          return data.map(function(linkData) {
+            return this.deserializeRelationshipIdentifier(linkData);
+          }, this);
+        } else {
+          return this.deserializeRelationshipIdentifier(data);
+        }
+
+      } else {
+        return data;
+      }
+    },
+
+    deserializeRelationshipIdentifier: function(data) {
+      var type = this.typeFromResourceType(data.type);
+      return {
+        type: type,
+        id: this.idFromResourceId(type, data.id)
+      };
     },
 
     deserializeRecords: function(type, ids, data) {
-      var records = [];
-
-      data.forEach(function(recordData, i) {
+      return data.map(function(recordData, i) {
         var id = ids && ids[i] ? ids[i] : null;
-
-        records.push(this.deserializeRecord(type, id, recordData));
+        return this.deserializeRecord(type, id, recordData);
       }, this);
-
-      return records;
     },
 
     deserializeRecord: function(type, id, data) {
+      var record = {};
+      var attributes;
+      var relationships;
+      var pk = this.schema.modelDefinition(type).primaryKey.name;
+
       if (id) {
-        data[this.schema.models[type].primaryKey.name] = id;
+        record[pk] = id;
       }
-      return this.schema.normalize(type, data);
+
+      this.deserializeKey(type, record, this.resourceKey(type), data.id);
+
+      if (data.attributes) {
+        attributes = data.attributes;
+        this.deserializeAttributes(type, record, attributes);
+      }
+
+      if (data.relationships) {
+        // temporarily assign relationships as __relationships
+        record.__relationships = data.relationships;
+      }
+
+      return this.schema.normalize(type, record);
     },
 
-    assignLinks: function(type, data) {
-      var primaryData = data[type];
-      var linkedData = data.linked;
+    deserializeKey: function(type, record, key, value) {
+      record[key] = value;
+    },
 
-      if (objects.isArray(primaryData)) {
-        this.assignLinksToRecords(type, primaryData);
+    deserializeAttributes: function(type, record, json) {
+      var modelDef = this.schema.modelDefinition(type);
+      Object.keys(modelDef.attributes).forEach(function(attr) {
+        var resourceAttr = this.resourceAttr(type, attr);
+        var value = json[resourceAttr];
+        if (value !== undefined) {
+          this.deserializeAttribute(type, record, attr, value);
+        }
+      }, this);
+    },
+
+    deserializeAttribute: function(type, record, attr, value) {
+      record[attr] = value;
+    },
+
+    assignLinks: function(type, records) {
+      if (objects.isArray(records.primary)) {
+        this.assignLinksToRecords(type, records.primary);
       } else {
-        this.assignLinksToRecord(type, primaryData);
+        this.assignLinksToRecord(type, records.primary);
       }
 
-      if (linkedData) {
-        Object.keys(linkedData).forEach(function(linkedType) {
-          this.assignLinksToRecords(linkedType, linkedData[linkedType]);
+      if (records.included) {
+        Object.keys(records.included).forEach(function(includedType) {
+          this.assignLinksToRecords(includedType, records.included[includedType]);
         }, this);
       }
     },
 
-    assignLinksToRecords: function(model, records) {
+    assignLinksToRecords: function(type, records) {
       records.forEach(function(record) {
-        this.assignLinksToRecord(model, record);
+        this.assignLinksToRecord(type, record);
       }, this);
     },
 
-    assignLinksToRecord: function(model, record) {
-      if (record.links) {
-        record.__meta.links = record.__meta.links || {};
-
-        var meta = record.__meta.links;
+    assignLinksToRecord: function(type, record) {
+      if (record.__relationships) {
         var schema = this.schema;
-        var linkSchema;
+        var linkDef;
         var linkValue;
         var id;
 
-        Object.keys(record.links).forEach(function(link) {
-          linkValue = record.links[link];
-          linkSchema = schema.models[model].links[link];
+        Object.keys(record.__relationships).forEach(function(link) {
+          linkValue = record.__relationships[link].data;
+          linkDef = schema.modelDefinition(type).links[link];
 
-          if (!linkSchema) return;
+          if (!linkDef) return;
 
-          if (linkSchema.type === 'hasMany' && objects.isArray(linkValue)) {
+          if (linkDef.type === 'hasMany' && objects.isArray(linkValue)) {
             record.__rel[link] = record.__rel[link] || [];
 
             var rels = record.__rel[link];
             linkValue.forEach(function(resourceId) {
-              id = this.idFromResourceId(linkSchema.model, resourceId);
-              record.__rel[link][id] = id;
+              id = this.idFromResourceId(linkDef.model, resourceId.id);
+              record.__rel[link][id] = true;
             }, this);
 
-          } else if (linkSchema.type === 'hasOne' && (typeof linkValue === 'string' || typeof linkValue === 'number')) {
-            id = this.idFromResourceId(linkSchema.model, linkValue);
+          } else if (linkDef.type === 'hasOne' && objects.isObject(linkValue)) {
+            id = this.idFromResourceId(linkDef.model, linkValue.id);
             record.__rel[link] = id;
 
-          } else {
-            meta[link] = linkValue;
           }
 
         }, this);
 
-        delete record.links;
+        delete record.__relationships;
       }
     }
   });
 
-  exports['default'] = JSONAPISerializer;
-
 });
-define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/assert', 'orbit/lib/objects', 'orbit/operation', 'orbit-common/source', 'orbit-common/serializer', 'orbit-common/jsonapi-serializer', 'orbit-common/lib/exceptions'], function (exports, Orbit, assert, objects, Operation, Source, Serializer, JSONAPISerializer, exceptions) {
+define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/assert', 'orbit/lib/exceptions', 'orbit/lib/objects', 'orbit/operation', 'orbit/action-queue', 'orbit-common/source', 'orbit-common/serializer', 'orbit-common/jsonapi-serializer', 'orbit-common/lib/exceptions', 'orbit/transform-result', 'orbit-common/operation-processors/cache-integrity-processor', 'orbit-common/operation-processors/deletion-tracking-processor', 'orbit-common/operation-processors/schema-consistency-processor'], function (exports, Orbit, assert, exceptions, objects, Operation, ActionQueue, Source, Serializer, JSONAPISerializer, lib__exceptions, TransformResult, CacheIntegrityProcessor, DeletionTrackingProcessor, SchemaConsistencyProcessor) {
 
   'use strict';
 
-  var JSONAPISource = Source['default'].extend({
+  exports['default'] = Source['default'].extend({
 
-    init: function(schema, options) {
+    init: function(options) {
+      assert.assert('JSONAPISource constructor requires `options`', options);
       assert.assert('JSONAPISource requires Orbit.Promise be defined', Orbit['default'].Promise);
       assert.assert('JSONAPISource requires Orbit.ajax be defined', Orbit['default'].ajax);
 
-      this._super.apply(this, arguments);
+      options.useCache = options.useCache !== undefined ? options.useCache : true;
+      if (options.useCache) {
+        options.cacheOptions = options.cacheOptions || {};
+        options.cacheOptions.processors =  options.cacheOptions.processors || [SchemaConsistencyProcessor['default'], CacheIntegrityProcessor['default'], DeletionTrackingProcessor['default']];
+      }
 
-      options = options || {};
+      this._super.call(this, options);
+
       this.namespace        = options.namespace || this.namespace;
       this.host             = options.host || this.host;
       this.headers          = options.headers || this.headers;
-      this.usePatch         = options.usePatch !== undefined ? options.usePatch : this.usePatch;
       this.SerializerClass  = options.SerializerClass || this.SerializerClass;
 
       // If `SerializerClass` is obtained through the _super chain, dereference
@@ -306,7 +375,7 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
         this.SerializerClass = this.SerializerClass.wrappedFunction;
       }
 
-      this.serializer = new this.SerializerClass(schema);
+      this.serializer = new this.SerializerClass(this.schema);
 
       assert.assert('Serializer must be an instance of OC.Serializer', this.serializer instanceof Serializer['default']);
     },
@@ -315,117 +384,110 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
     host: null,
     headers: null,
     SerializerClass: JSONAPISerializer['default'],
-    usePatch: false,
 
     /////////////////////////////////////////////////////////////////////////////
     // Transformable interface implementation
     /////////////////////////////////////////////////////////////////////////////
 
-    _transform: function(operation) {
-      var _this = this;
-      var op    = operation.op;
-      var path  = operation.path;
+    _transform: function(ops) {
+      var fullResult = new TransformResult['default']();
+      var queue = new ActionQueue['default']({autoProcess: false});
+      var operation;
+      var method;
+      var action;
 
-      if (path.length > 2) {
-        if (path[2] === '__rel') {
-          if (op === 'add') {
-            return _this._transformAddLink(operation);
-          } else if (op === 'remove') {
-            return _this._transformRemoveLink(operation);
-          } else if (op === 'replace') {
-            return _this._transformReplaceLink(operation);
-          }
+      for (var i = 0, len = ops.length; i < len; i++) {
+        operation = ops[i];
+
+        if (action && this._mergeOperationWithAction(action, operation)) {
+          // Operation merged with previous action.
         } else {
-          return _this._transformUpdateAttribute(operation);
-        }
-
-      } else if (path.length > 1) {
-        if (op === 'add') {
-          return _this._transformAdd(operation);
-
-        } else if (op === 'replace') {
-          return _this._transformReplace(operation);
-
-        } else if (op === 'remove') {
-          return _this._transformRemove(operation);
+          // Not able to merge operation with previous action, so we need to
+          // queue a new action.
+          method = this._operationMethod(operation);
+          action = this._createTransformAction(method, operation, fullResult);
+          queue.push(action);
         }
       }
 
-      throw new exceptions.OperationNotAllowed('JSONAPISource#transform could not process operation: ' + operation.op +
-                                    ' with path: ' + operation.path.join('/'));
+      return queue.process().then(function() {
+        return fullResult;
+      });
     },
-
 
     /////////////////////////////////////////////////////////////////////////////
     // Requestable interface implementation
     /////////////////////////////////////////////////////////////////////////////
 
-    _find: function(type, id) {
-      if (id && (typeof id === 'number' || typeof id === 'string')) {
-        return this._findOne(type, id);
+    _find: function(type, id, options) {
+      if (options) throw new exceptions.Exception('`JSONAPISource#findLink` does not support `options` argument');
 
-      } else if (id && objects.isArray(id)) {
+      if (objects.isNone(id)) {
+        return this._findAll(type);
+
+      } else if (objects.isArray(id)) {
         return this._findMany(type, id);
 
       } else {
-        var resourceKey = this.serializer.resourceKey(type);
-
-        if (id && typeof id === 'object' && id[resourceKey]) {
-          return this._findOne(type, id);
-
-        } else {
-          return this._findQuery(type, id);
-        }
+        return this._findOne(type, id);
       }
     },
 
-    _findLink: function(type, id, link) {
+    _findLink: function(type, id, link, options) {
       var _this = this;
+
+      if (options) throw new exceptions.Exception('`JSONAPISource#findLink` does not support `options` argument');
+
+      id = this.getId(type, id);
+
       return this.ajax(this.resourceLinkURL(type, id, link), 'GET').then(
         function(raw) {
-          var linkDef = _this.schema.models[type].links[link];
-          var relId = _this.serializer.deserializeLink(linkDef.model, raw);
-
-          return _this.settleTransforms().then(function() {
-            return relId;
-          });
+          var relId = _this.serializer.deserializeLink(raw.data);
+          return relId;
         }
       );
     },
 
-  // TODO - Override `_findLinked` to use meta-data stored about links
-  //
-  //  _findLinked: function(type, id, link, relId) {
-  //    if (relId === undefined) {
-  //      id = this.getId(type, id);
-  //
-  //      var record = this.retrieve([type, id]);
-  //      if (record) {
-  //        relId = record.__rel[link];
-  //        if (record.__meta.links && record.__meta.links[link]) {
-  //          var linkMeta = record.__meta.links[link];
-  //
-  //          // find linked from meta
-  //        }
-  //      }
-  //    }
-  //
-  //    return this._super.apply(this, arguments);
-  //  },
+   _findLinked: function(type, id, link, options) {
+     var _this = this;
+
+     if (options) throw new exceptions.Exception('`JSONAPISource#findLinked` does not support `options` argument');
+
+     id = this.getId(type, id);
+
+     return this.ajax(this.resourceLinkedURL(type, id, link), 'GET').then(
+       function(raw) {
+         var linkDef = _this.schema.linkDefinition(type, link);
+
+         var result = _this.deserialize(linkDef.model, null, raw);
+
+         return _this.transformed(result.result).then(function() {
+           return result.data;
+         });
+       }
+     );
+   },
+
+   _query: function(type, query, options) {
+     var _this = this;
+
+     if (options) throw new exceptions.Exception('`JSONAPISource#query` does not support `options` argument');
+
+     return this.ajax(this.resourceURL(type), 'GET', {data: {filter: query}}).then(
+       function(raw) {
+         var deserialized = _this.deserialize(type, null, raw);
+         return _this.transformed(deserialized.result).then(function() {
+           return deserialized.data;
+         });
+       }
+     );
+   },
 
     /////////////////////////////////////////////////////////////////////////////
     // Internals
     /////////////////////////////////////////////////////////////////////////////
 
     _transformAdd: function(operation) {
-      if (this.usePatch) {
-        return this._transformAddWithPatch(operation);
-      } else {
-        return this._transformAddStd(operation);
-      }
-    },
-
-    _transformAddStd: function(operation) {
       var _this = this;
       var type = operation.path[0];
       var id = operation.path[1];
@@ -433,383 +495,253 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
 
       return this.ajax(this.resourceURL(type), 'POST', {data: json}).then(
         function(raw) {
-          _this.deserialize(type, id, raw, operation);
-        }
-      );
-    },
+          var result = _this._transformCache(operation);
 
-    _transformAddWithPatch: function(operation) {
-      var _this = this;
-      var type = operation.path[0];
-      var id = operation.path[1];
-
-      var remoteOp = {
-        op: 'add',
-        path: '/-',
-        value: this.serializer.serializeRecord(type, operation.value)
-      };
-
-      return this.ajax(this.resourceURL(type), 'PATCH', {data: [ remoteOp ]}).then(
-        function(raw) {
-          if (raw && objects.isArray(raw)) {
-            _this.deserialize(type, id, raw[0], operation);
-          } else {
-            _this._transformCache(operation);
+          var deserialized = _this.deserialize(type, id, raw);
+          if (!deserialized.result.isEmpty()) {
+            _this.transformed(deserialized.result);
           }
+
+          return result;
         }
       );
     },
 
-    _transformReplace: function(operation) {
-      if (this.usePatch) {
-        return this._transformReplaceWithPatch(operation);
-      } else {
-        return this._transformReplaceStd(operation);
-      }
-    },
+    _transformReplace: function(ops) {
+      ops = objects.toArray(ops);
 
-    _transformReplaceStd: function(operation) {
       var _this = this;
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var value = operation.value;
+      var type = ops[0].path[0];
+      var id = ops[0].path[1];
+      var modelDef = this.schema.modelDefinition(type);
 
-      var json = this.serializer.serialize(type, value);
+      var record = {};
 
-      return this.ajax(this.resourceURL(type, id), 'PUT', {data: json}).then(
+      ops.forEach(function(operation) {
+        var path = operation.path;
+        var value = operation.value;
+        if (path[2]) {
+          if (path[2] === '__rel') {
+            record.__rel = record.__rel || {};
+            record.__rel[path[3]] = value;
+          } else {
+            record[path[2]] = value;
+          }
+        } else {
+          record = objects.merge(record, value);
+        }
+      });
+
+      record[modelDef.primaryKey.name] = id;
+
+      var json = this.serializer.serialize(type, record);
+
+      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: json}).then(
         function(raw) {
+          var result = _this._transformCache(ops);
+
           // TODO - better 204 (no content) checking
           if (raw && Object.keys(raw).length > 0) {
-            _this.deserialize(type, id, raw, operation);
-          } else {
-            _this._transformCache(operation);
+            var deserialized = _this.deserialize(type, id, raw);
+            if (!deserialized.result.isEmpty()) {
+              _this.transformed(deserialized.result);
+            }
           }
-        }
-      );
-    },
 
-    _transformReplaceWithPatch: function(operation) {
-      var _this = this;
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var value = operation.value;
-
-      var remoteOp = {
-        op: 'replace',
-        path: '/',
-        value: this.serializer.serializeRecord(type, value)
-      };
-
-      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: [ remoteOp ]}).then(
-        function(raw) {
-          if (raw && objects.isArray(raw)) {
-            _this.deserialize(type, id, raw[0], operation);
-          } else {
-            _this._transformCache(operation);
-          }
+          return result;
         }
       );
     },
 
     _transformRemove: function(operation) {
-      if (this.usePatch) {
-        return this._transformRemoveWithPatch(operation);
-      } else {
-        return this._transformRemoveStd(operation);
-      }
-    },
-
-    _transformRemoveStd: function(operation) {
       var _this = this;
       var type = operation.path[0];
       var id = operation.path[1];
 
       return this.ajax(this.resourceURL(type, id), 'DELETE').then(function() {
-        _this._transformCache({op: 'remove', path: [type, id]});
+        return _this._transformCache({op: 'remove', path: [type, id]});
       });
     },
 
-    _transformRemoveWithPatch: function(operation) {
-      var _this = this;
-      var type = operation.path[0];
-      var id = operation.path[1];
-
-      var remoteOp = {
-        op: 'remove',
-        path: '/'
-      };
-
-      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: [ remoteOp ]}).then(
-        function() {
-          _this._transformCache(operation);
-        }
-      );
-    },
-
     _transformAddLink: function(operation) {
-      if (this.usePatch) {
-        return this._transformAddLinkWithPatch(operation);
-      } else {
-        return this._transformAddLinkStd(operation);
-      }
-    },
-
-    _transformAddLinkStd: function(operation) {
       var _this = this;
 
       var type = operation.path[0];
       var id = operation.path[1];
       var link = operation.path[3];
       var relId = operation.path[4] || operation.value;
-
-      var linkDef = this.schema.models[type].links[link];
-      var relType = linkDef.model;
-      var relResourceType = this.serializer.resourceType(relType);
-      var relResourceId = this.serializer.resourceId(relType, relId);
-
+      var relType = this.schema.linkDefinition(type, link).model;
       var method = 'POST';
-      var json = {};
-      json[relResourceType] = relResourceId;
+      var json = {
+        data: [this.serializer.serializeRelationshipIdentifier(relType, relId)]
+      };
 
       return this.ajax(this.resourceLinkURL(type, id, link), method, {data: json}).then(
         function() {
-          _this._transformCache(operation);
-        }
-      );
-    },
-
-    _transformAddLinkWithPatch: function(operation) {
-      var _this = this;
-
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var link = operation.path[3];
-      var relId = operation.path[4] || operation.value;
-      var linkDef = this.schema.models[type].links[link];
-      var relType = linkDef.model;
-      var relResourceId = this.serializer.resourceId(relType, relId);
-      var remoteOp;
-
-      if (linkDef.type === 'hasMany') {
-        remoteOp = {
-          op: 'add',
-          path: '/-',
-          value: relResourceId
-        };
-      } else {
-        remoteOp = {
-          op: 'replace',
-          path: '/',
-          value: relResourceId
-        };
-      }
-
-      return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
-        function() {
-          _this._transformCache(operation);
+          return _this._transformCache(operation);
         }
       );
     },
 
     _transformRemoveLink: function(operation) {
-      if (this.usePatch) {
-        return this._transformRemoveLinkWithPatch(operation);
-      } else {
-        return this._transformRemoveLinkStd(operation);
-      }
-    },
-
-    _transformRemoveLinkStd: function(operation) {
       var _this = this;
 
       var type = operation.path[0];
       var id = operation.path[1];
       var link = operation.path[3];
       var relId = operation.path[4];
+      var relType = this.schema.linkDefinition(type, link).model;
+      var method = 'DELETE';
+      var json = {
+        data: [this.serializer.serializeRelationshipIdentifier(relType, relId)]
+      };
 
-      return this.ajax(this.resourceLinkURL(type, id, link, relId), 'DELETE').then(
+      return this.ajax(this.resourceLinkURL(type, id, link), method, {data: json}).then(
         function() {
-          _this._transformCache(operation);
-        }
-      );
-    },
-
-    _transformRemoveLinkWithPatch: function(operation) {
-      var _this = this;
-
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var link = operation.path[3];
-      var linkDef = this.schema.models[type].links[link];
-      var remoteOp;
-
-      if (linkDef.type === 'hasMany') {
-        var relId = operation.path[4];
-        var relType = linkDef.model;
-        var relResourceId = this.serializer.resourceId(relType, relId);
-
-        remoteOp = {
-          op: 'remove',
-          path: '/' + relResourceId
-        };
-      } else {
-        remoteOp = {
-          op: 'remove',
-          path: '/'
-        };
-      }
-
-      return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
-        function() {
-          _this._transformCache(operation);
+          return _this._transformCache(operation);
         }
       );
     },
 
     _transformReplaceLink: function(operation) {
-      if (this.usePatch) {
-        return this._transformReplaceLinkWithPatch(operation);
-      } else {
-        return this._transformReplaceLinkStd(operation);
-      }
-    },
-
-    _transformReplaceLinkStd: function(operation) {
       var _this = this;
 
       var type = operation.path[0];
       var id = operation.path[1];
       var link = operation.path[3];
       var relId = operation.path[4] || operation.value;
+      var linkDef = this.schema.linkDefinition(type, link);
+      var relType = linkDef.model;
+      var data;
 
-      // Convert a map of ids to an array
-      if (objects.isObject(relId)) {
-        relId = Object.keys(relId);
+      if (linkDef.type === 'hasMany') {
+        // Convert a map of ids to an array
+        if (objects.isObject(relId)) {
+          data = Object.keys(relId).map(function(id) {
+            return this.serializer.serializeRelationshipIdentifier(relType, id);
+          }, this);
+        } else {
+          data = [this.serializer.serializeRelationshipIdentifier(relType, relId)];
+        }
+      } else {
+        data = this.serializer.serializeRelationshipIdentifier(relType, relId);
       }
 
-      var linkDef = this.schema.models[type].links[link];
-      var relType = linkDef.model;
-      var relResourceType = this.serializer.resourceType(relType);
-      var relResourceId = this.serializer.resourceId(relType, relId);
-
-      var method = 'PUT';
-      var json = {};
-      json[relResourceType] = relResourceId;
+      var method = 'PATCH';
+      var json = {
+        data: data
+      };
 
       return this.ajax(this.resourceLinkURL(type, id, link), method, {data: json}).then(
         function() {
-          _this._transformCache(operation);
+          return _this._transformCache(operation);
         }
       );
     },
 
-    _transformReplaceLinkWithPatch: function(operation) {
-      var _this = this;
-
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var link = operation.path[3];
-      var relId = operation.path[4] || operation.value;
-
-      // Convert a map of ids to an array
-      if (objects.isObject(relId)) {
-        relId = Object.keys(relId);
-      }
-
-      var linkDef = this.schema.models[type].links[link];
-      var relType = linkDef.model;
-      var relResourceId = this.serializer.resourceId(relType, relId);
-      var remoteOp;
-
-      remoteOp = {
-        op: 'replace',
-        path: '/',
-        value: relResourceId
-      };
-
-      return this.ajax(this.resourceLinkURL(type, id, link), 'PATCH', {data: [ remoteOp ]}).then(
-        function() {
-          _this._transformCache(operation);
-        }
-      );
-    },
-
-    _transformUpdateAttribute: function(operation) {
-      if (this.usePatch) {
-        return this._transformUpdateAttributeWithPatch(operation);
-      } else {
-        return this._transformUpdateAttributeStd(operation);
-      }
-    },
-
-    _transformUpdateAttributeStd: function(operation) {
+    _transformReplaceAttribute: function(operation) {
       var _this = this;
       var type = operation.path[0];
       var id = operation.path[1];
       var attr = operation.path[2];
+      var modelDef = this.schema.modelDefinition(type);
 
       var record = {};
       record[attr] = operation.value;
+      record[modelDef.primaryKey.name] = id;
 
-      var serialized = {};
-      this.serializer.serializeAttribute(type, record, attr, serialized);
+      var json = this.serializer.serialize(type, record);
 
-      var json = {};
-      var resourceType = this.serializer.resourceType(type);
-      json[resourceType] = serialized;
-
-      return this.ajax(this.resourceURL(type, id), 'PUT', {data: json}).then(
+      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: json}).then(
         function(raw) {
-          _this._transformCache(operation);
+          return _this._transformCache(operation);
         }
       );
     },
 
-    _transformUpdateAttributeWithPatch: function(operation) {
+    _operationMethod: function(operation) {
+      var op = operation.op;
+      var path = operation.path;
+
+      if (path.length > 2) {
+        if (path[2] === '__rel') {
+          if (op === 'add') {
+            return '_transformAddLink';
+          } else if (op === 'remove') {
+            return '_transformRemoveLink';
+          } else if (op === 'replace') {
+            return '_transformReplaceLink';
+          }
+        } else {
+          return '_transformReplaceAttribute';
+        }
+
+      } else if (path.length > 1) {
+        if (op === 'add') {
+          return '_transformAdd';
+
+        } else if (op === 'replace') {
+          return '_transformReplace';
+
+        } else if (op === 'remove') {
+          return '_transformRemove';
+        }
+      }
+    },
+
+    _mergeOperationWithAction: function(action, operation) {
+      var actionOperation = objects.toArray(action.data.operation)[0];
+
+      // Merge replace operations with previous replace operations that update
+      // the same record.
+      if (actionOperation.op === 'replace' && operation.op === 'replace' &&
+          actionOperation.path[0] === operation.path[0] &&
+          actionOperation.path[1] === operation.path[1]) {
+
+        action.data.method = '_transformReplace';
+        action.data.operation = objects.toArray( action.data.operation ).concat([operation]);
+
+        return true;
+      }
+    },
+
+    _createTransformAction: function(method, operation, fullResult) {
       var _this = this;
-      var type = operation.path[0];
-      var id = operation.path[1];
-      var attr = operation.path[2];
 
-      var remoteOp = {
-        op: 'replace',
-        path: '/' + attr,
-        value: operation.value
+      return {
+        data: {
+          method: method,
+          operation: operation
+        },
+        process: function() {
+          return _this[this.data.method].call(_this, this.data.operation).then(function(result) {
+            if (result) {
+              fullResult.concat(result);
+            }
+          });
+        }
       };
+    },
 
-      return this.ajax(this.resourceURL(type, id), 'PATCH', {data: [ remoteOp ]}).then(
-        function() {
-          _this._transformCache(operation);
+    _findAll: function(type) {
+      var _this = this;
+      return this.ajax(this.resourceURL(type), 'GET').then(
+        function(raw) {
+          var deserialized = _this.deserialize(type, null, raw);
+          return _this.transformed(deserialized.result).then(function() {
+            return deserialized.data;
+          });
         }
       );
-    },
-
-    _addRecordsToCache: function(type, records, parentOperation) {
-      var _this = this;
-      records.forEach(function(record) {
-        _this._addRecordToCache(type, record, parentOperation);
-      });
-    },
-
-    _addRecordToCache: function(type, record, parentOperation) {
-      var operation = {
-        op: 'add',
-        path: [type, this.getId(type, record)],
-        value: record
-      };
-
-      if (parentOperation) operation = parentOperation.spawn(operation);
-
-      this._transformCache(operation);
     },
 
     _findOne: function(type, id) {
       var _this = this;
       return this.ajax(this.resourceURL(type, id), 'GET').then(
         function(raw) {
-          var record = _this.deserialize(type, null, raw);
-          return _this.settleTransforms().then(function() {
-            return record;
+          var deserialized = _this.deserialize(type, null, raw);
+          return _this.transformed(deserialized.result).then(function() {
+            return deserialized.data;
           });
         }
       );
@@ -819,54 +751,39 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       var _this = this;
       return this.ajax(this.resourceURL(type, ids), 'GET').then(
         function(raw) {
-          var records = _this.deserialize(type, null, raw);
-          return _this.settleTransforms().then(function() {
-            return objects.isArray(records) ? records : [records];
+          var deserialized = _this.deserialize(type, null, raw);
+          return _this.transformed(deserialized.result).then(function() {
+            return deserialized.data;
           });
         }
       );
     },
 
-    _findQuery: function(type, query) {
-      var _this = this;
+    _addRecordsToCache: function(type, records) {
+      var result = new TransformResult['default']();
 
-      return this.ajax(this.resourceURL(type), 'GET', {data: query}).then(
-        function(raw) {
-          var records = _this.deserialize(type, null, raw);
-          return _this.settleTransforms().then(function() {
-            return records;
-          });
-        }
-      );
+      records.forEach(function(record) {
+        result.concat(this._addRecordToCache(type, record));
+      }, this);
+
+      return result;
     },
 
-    _transformCache: function(operation) {
-      var pathToVerify,
-          inverse;
+    _addRecordToCache: function(type, record) {
+      var operation = {
+        op: 'add',
+        path: [type, this.getId(type, record)],
+        value: record
+      };
 
-      if (operation.op === 'add') {
-        pathToVerify = operation.path.slice(0, operation.path.length - 1);
+      return this._transformCache(operation);
+    },
+
+    _transformCache: function(ops) {
+      if (this._cache) {
+        return this._cache.transform( objects.toArray(ops) );
       } else {
-        pathToVerify = operation.path;
-      }
-
-      if (this.retrieve(pathToVerify)) {
-        // transforming the cache will trigger a call to `_cacheDidTransform`,
-        // which will then trigger `didTransform`
-        this._cache.transform(operation);
-
-      } else if (operation.op === 'replace') {
-        // try adding instead of replacing if the cache does not yet contain
-        // the data
-        operation.op = 'add';
-        this._transformCache(operation);
-
-      } else {
-        // if the cache can't be transformed because, still trigger `didTransform`
-        //
-        // NOTE: this is not an error condition, since the local cache will often
-        // be sparsely populated compared with the remote store
-        this.didTransform(operation, []);
+        return new TransformResult['default'](ops);
       }
     },
 
@@ -892,17 +809,11 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
         hash.dataType = 'json';
         hash.context = _this;
 
-        // console.log('ajax start', method);
+        // console.log('ajax start', method, url);
 
         if (hash.data && method !== 'GET') {
-          // If contentType has not been specified, use the appropriate type
-          // according to the JSON API spec
           if (!hash.contentType) {
-            if (method === 'PATCH') {
-              hash.contentType = 'application/json-patch+json; charset=utf-8';
-            } else {
-              hash.contentType = 'application/vnd.api+json; charset=utf-8';
-            }
+            hash.contentType = _this.ajaxContentType(hash);
           }
           hash.data = JSON.stringify(hash.data);
         }
@@ -934,6 +845,10 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
 
         Orbit['default'].ajax(hash);
       });
+    },
+
+    ajaxContentType: function(url, method) {
+      return 'application/vnd.api+json; charset=utf-8';
     },
 
     ajaxHeaders: function() {
@@ -973,10 +888,10 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
 
     resourceLinkURL: function(type, id, link, relId) {
       var url = this.resourceURL(type, id);
-      url += '/links/' + this.serializer.resourceLink(type, link);
+      url += '/relationships/' + this.serializer.resourceLink(type, link);
 
       if (relId) {
-        var linkDef = this.schema.models[type].links[link];
+        var linkDef = this.schema.linkDefinition(type, link);
 
         url += '/' + this._resourceIdURLSegment(linkDef.model, relId);
       }
@@ -984,40 +899,37 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       return url;
     },
 
-    deserialize: function(type, id, data, parentOperation) {
-      var deserialized = this.serializer.deserialize(type, id, data);
-      var primaryRecords = deserialized[type];
+    resourceLinkedURL: function(type, id, link) {
+      var url = this.resourceURL(type, id);
+      url += '/' + this.serializer.resourceLink(type, link);
+      return url;
+    },
 
-      // Create a new parent operation, if necessary, to ensure that subsequent
-      // operations are related and will be settled together in the same
-      // transformation.
-      //
-      // Note: this parent operation is not actually performed on this source.
-      // It is only created to establish a common ancestor.
-      if (!parentOperation) {
-        parentOperation = new Operation['default']();
+    deserialize: function(type, id, data) {
+      var records = this.serializer.deserialize(type, id, data);
+      var primaryData = records.primary;
+
+      var result;
+
+      if (objects.isArray(primaryData)) {
+        result = this._addRecordsToCache(type, primaryData);
+      } else {
+        result = this._addRecordToCache(type, primaryData);
       }
 
-      if (this._cache) {
-        if (objects.isArray(primaryRecords)) {
-          this._addRecordsToCache(type, primaryRecords, parentOperation);
-        } else {
-          this._addRecordToCache(type, primaryRecords, parentOperation);
-        }
-
-        if (deserialized.linked) {
-          Object.keys(deserialized.linked).forEach(function(relType) {
-            var relRecords = deserialized.linked[relType];
-            this._addRecordsToCache(relType, relRecords, parentOperation);
-          }, this);
-        }
+      if (records.included) {
+        Object.keys(records.included).forEach(function(relType) {
+          var relRecords = records.included[relType];
+          result.concat(this._addRecordsToCache(relType, relRecords));
+        }, this);
       }
 
-      return primaryRecords;
+      return {
+        result: result,
+        data: primaryData
+      };
     }
   });
-
-  exports['default'] = JSONAPISource;
 
 });
 window.OC.JSONAPISource = requireModule("orbit-common/jsonapi-source")["default"];
