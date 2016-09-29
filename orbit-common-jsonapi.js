@@ -154,10 +154,8 @@ define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer',
       var modelDef = this.schema.modelDefinition(type);
       var linkNames = Object.keys(modelDef.links);
 
-      if (linkNames.length > 0 && record.__rel) {
-        json.relationships = {};
-
-        linkNames.forEach(function (link) {
+      if (record.__rel) {
+        Object.keys(record.__rel).forEach(function (link) {
           var linkDef = modelDef.links[link];
           var value = record.__rel[link];
 
@@ -171,6 +169,7 @@ define('orbit-common/jsonapi-serializer', ['exports', 'orbit-common/serializer',
             value = null;
           }
 
+          json.relationships = json.relationships || {};
           json.relationships[link] = {
             data: value
           };
