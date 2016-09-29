@@ -616,8 +616,10 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
         } else {
           data = [this.serializer.serializeRelationshipIdentifier(relType, relId)];
         }
-      } else {
+      } else if (relId !== null) {
         data = this.serializer.serializeRelationshipIdentifier(relType, relId);
+      } else {
+        data = null;
       }
 
       var method = 'PATCH';
