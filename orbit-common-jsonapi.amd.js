@@ -413,16 +413,14 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
     /////////////////////////////////////////////////////////////////////////////
 
     _find: function(type, id, options) {
-      if (options) throw new exceptions.Exception('`JSONAPISource#findLink` does not support `options` argument');
-
       if (objects.isNone(id)) {
-        return this._findAll(type);
+        return this._findAll(type, options);
 
       } else if (objects.isArray(id)) {
-        return this._findMany(type, id);
+        return this._findMany(type, id, options);
 
       } else {
-        return this._findOne(type, id);
+        return this._findOne(type, id, options);
       }
     },
 
@@ -718,9 +716,9 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       };
     },
 
-    _findAll: function(type) {
+    _findAll: function(type, options) {
       var _this = this;
-      return this.ajax(this.resourceURL(type), 'GET').then(
+      return this.ajax(this.resourceURL(type), 'GET', {data: options}).then(
         function(raw) {
           var deserialized = _this.deserialize(type, null, raw);
           return _this.transformed(deserialized.result).then(function() {
@@ -730,9 +728,9 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       );
     },
 
-    _findOne: function(type, id) {
+    _findOne: function(type, id, options) {
       var _this = this;
-      return this.ajax(this.resourceURL(type, id), 'GET').then(
+      return this.ajax(this.resourceURL(type, id), 'GET', {data: options}).then(
         function(raw) {
           var deserialized = _this.deserialize(type, null, raw);
           return _this.transformed(deserialized.result).then(function() {
@@ -742,9 +740,9 @@ define('orbit-common/jsonapi-source', ['exports', 'orbit/main', 'orbit/lib/asser
       );
     },
 
-    _findMany: function(type, ids) {
+    _findMany: function(type, ids, options) {
       var _this = this;
-      return this.ajax(this.resourceURL(type, ids), 'GET').then(
+      return this.ajax(this.resourceURL(type, ids), 'GET', {data: options}).then(
         function(raw) {
           var deserialized = _this.deserialize(type, null, raw);
           return _this.transformed(deserialized.result).then(function() {

@@ -1,6 +1,6 @@
 {
   "name": "orbit.js",
-  "version": "0.7.0-beta.3.ef976682",
+  "version": "0.7.0-beta.3.a499700a",
   "namespace": "Orbit",
   "description": "A standalone library for data access and synchronization",
   "homepage": "https://github.com/orbitjs/orbit.js",
